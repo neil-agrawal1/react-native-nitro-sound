@@ -14,10 +14,10 @@ public protocol HybridSoundSpec_protocol: HybridObject {
   
 
   // Methods
-  func startRecorder(uri: String?, audioSets: AudioSet?, meteringEnabled: Bool?) throws -> Promise<String>
+  func startRecorder() throws -> Promise<Void>
+  func stopRecorder() throws -> Promise<Void>
   func pauseRecorder() throws -> Promise<String>
   func resumeRecorder() throws -> Promise<String>
-  func stopRecorder() throws -> Promise<String>
   func startPlayer(uri: String?, httpHeaders: Dictionary<String, String>?) throws -> Promise<String>
   func stopPlayer() throws -> Promise<String>
   func pausePlayer() throws -> Promise<String>
@@ -25,6 +25,8 @@ public protocol HybridSoundSpec_protocol: HybridObject {
   func seekToPlayer(time: Double) throws -> Promise<String>
   func setVolume(volume: Double) throws -> Promise<String>
   func setPlaybackSpeed(playbackSpeed: Double) throws -> Promise<String>
+  func setLoopEnabled(enabled: Bool) throws -> Promise<String>
+  func crossfadeTo(uri: String, duration: Double?) throws -> Promise<String>
   func setSubscriptionDuration(sec: Double) throws -> Void
   func addRecordBackListener(callback: @escaping (_ recordingMeta: RecordBackType) -> Void) throws -> Void
   func removeRecordBackListener() throws -> Void
@@ -32,6 +34,7 @@ public protocol HybridSoundSpec_protocol: HybridObject {
   func removePlayBackListener() throws -> Void
   func addPlaybackEndListener(callback: @escaping (_ playbackEndMeta: PlaybackEndType) -> Void) throws -> Void
   func removePlaybackEndListener() throws -> Void
+  func setLogCallback(callback: @escaping (_ message: String) -> Void) throws -> Void
   func mmss(secs: Double) throws -> String
   func mmssss(milisecs: Double) throws -> String
 }

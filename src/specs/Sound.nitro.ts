@@ -84,8 +84,13 @@ export enum AVLinearPCMBitDepthKeyIOSType {
 export type AudioQualityType = 'low' | 'medium' | 'high';
 
 // Interfaces
-// Platform-specific audio settings
-export interface IOSAudioSet {
+export interface AudioSet {
+  // Android settings
+  AudioSourceAndroid?: AudioSourceAndroidType;
+  OutputFormatAndroid?: OutputFormatAndroidType;
+  AudioEncoderAndroid?: AudioEncoderAndroidType;
+
+  // iOS settings
   AVEncoderAudioQualityKeyIOS?: AVEncoderAudioQualityIOSType;
   AVModeIOS?: AVModeIOSOption;
   AVEncodingOptionIOS?: AVEncodingOption;
@@ -96,26 +101,14 @@ export interface IOSAudioSet {
   AVLinearPCMIsFloatKeyIOS?: boolean;
   AVLinearPCMIsNonInterleavedIOS?: boolean;
   AVSampleRateKeyIOS?: number;
-}
 
-export interface AndroidAudioSet {
-  AudioSourceAndroid?: AudioSourceAndroidType;
-  OutputFormatAndroid?: OutputFormatAndroidType;
-  AudioEncoderAndroid?: AudioEncoderAndroidType;
-}
-
-export interface CommonAudioSet {
+  // Common settings
   AudioQuality?: AudioQualityType;
   AudioChannels?: number;
   AudioSamplingRate?: number;
   AudioEncodingBitRate?: number;
   IncludeBase64?: boolean;
 }
-
-export interface AudioSet
-  extends IOSAudioSet,
-    AndroidAudioSet,
-    CommonAudioSet {}
 
 export interface RecordBackType {
   isRecording?: boolean;
@@ -141,15 +134,13 @@ export type PlaybackEndListener = (playbackEndMeta: PlaybackEndType) => void;
 
 export interface Sound
   extends HybridObject<{ ios: 'swift'; android: 'kotlin' }> {
-  // Recording methods
-  startRecorder(
-    uri?: string,
-    audioSets?: AudioSet,
-    meteringEnabled?: boolean
-  ): Promise<string>;
+  // Recording methods (unified AVAudioEngine with speech detection)
+  startRecorder(): Promise<void>;
+  stopRecorder(): Promise<void>;
+
+  // Legacy methods (stubs for backwards compatibility)
   pauseRecorder(): Promise<string>;
   resumeRecorder(): Promise<string>;
-  stopRecorder(): Promise<string>;
 
   // Playback methods
   startPlayer(
@@ -162,6 +153,12 @@ export interface Sound
   seekToPlayer(time: number): Promise<string>;
   setVolume(volume: number): Promise<string>;
   setPlaybackSpeed(playbackSpeed: number): Promise<string>;
+
+  // Loop control methods
+  setLoopEnabled(enabled: boolean): Promise<string>;
+
+  // Crossfade methods
+  crossfadeTo(uri: string, duration?: number): Promise<string>;
 
   // Subscription
   setSubscriptionDuration(sec: number): void;
@@ -177,6 +174,9 @@ export interface Sound
     callback: (playbackEndMeta: PlaybackEndType) => void
   ): void;
   removePlaybackEndListener(): void;
+
+  // Logging methods
+  setLogCallback(callback: (message: string) => void): void;
 
   // Utility methods
   mmss(secs: number): string;

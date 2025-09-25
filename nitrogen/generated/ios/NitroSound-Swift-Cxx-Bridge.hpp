@@ -8,26 +8,8 @@
 #pragma once
 
 // Forward declarations of C++ defined types
-// Forward declaration of `AVEncoderAudioQualityIOSType` to properly resolve imports.
-namespace margelo::nitro::sound { enum class AVEncoderAudioQualityIOSType; }
-// Forward declaration of `AVEncodingOption` to properly resolve imports.
-namespace margelo::nitro::sound { enum class AVEncodingOption; }
-// Forward declaration of `AVLinearPCMBitDepthKeyIOSType` to properly resolve imports.
-namespace margelo::nitro::sound { enum class AVLinearPCMBitDepthKeyIOSType; }
-// Forward declaration of `AVModeIOSOption` to properly resolve imports.
-namespace margelo::nitro::sound { enum class AVModeIOSOption; }
-// Forward declaration of `AudioEncoderAndroidType` to properly resolve imports.
-namespace margelo::nitro::sound { enum class AudioEncoderAndroidType; }
-// Forward declaration of `AudioQualityType` to properly resolve imports.
-namespace margelo::nitro::sound { enum class AudioQualityType; }
-// Forward declaration of `AudioSet` to properly resolve imports.
-namespace margelo::nitro::sound { struct AudioSet; }
-// Forward declaration of `AudioSourceAndroidType` to properly resolve imports.
-namespace margelo::nitro::sound { enum class AudioSourceAndroidType; }
 // Forward declaration of `HybridSoundSpec` to properly resolve imports.
 namespace margelo::nitro::sound { class HybridSoundSpec; }
-// Forward declaration of `OutputFormatAndroidType` to properly resolve imports.
-namespace margelo::nitro::sound { enum class OutputFormatAndroidType; }
 // Forward declaration of `PlayBackType` to properly resolve imports.
 namespace margelo::nitro::sound { struct PlayBackType; }
 // Forward declaration of `PlaybackEndType` to properly resolve imports.
@@ -40,16 +22,7 @@ namespace margelo::nitro::sound { struct RecordBackType; }
 namespace NitroSound { class HybridSoundSpec_cxx; }
 
 // Include C++ defined types
-#include "AVEncoderAudioQualityIOSType.hpp"
-#include "AVEncodingOption.hpp"
-#include "AVLinearPCMBitDepthKeyIOSType.hpp"
-#include "AVModeIOSOption.hpp"
-#include "AudioEncoderAndroidType.hpp"
-#include "AudioQualityType.hpp"
-#include "AudioSet.hpp"
-#include "AudioSourceAndroidType.hpp"
 #include "HybridSoundSpec.hpp"
-#include "OutputFormatAndroidType.hpp"
 #include "PlayBackType.hpp"
 #include "PlaybackEndType.hpp"
 #include "RecordBackType.hpp"
@@ -69,6 +42,62 @@ namespace NitroSound { class HybridSoundSpec_cxx; }
  */
 namespace margelo::nitro::sound::bridge::swift {
 
+  // pragma MARK: std::shared_ptr<Promise<void>>
+  /**
+   * Specialized version of `std::shared_ptr<Promise<void>>`.
+   */
+  using std__shared_ptr_Promise_void__ = std::shared_ptr<Promise<void>>;
+  inline std::shared_ptr<Promise<void>> create_std__shared_ptr_Promise_void__() noexcept {
+    return Promise<void>::create();
+  }
+  inline PromiseHolder<void> wrap_std__shared_ptr_Promise_void__(std::shared_ptr<Promise<void>> promise) noexcept {
+    return PromiseHolder<void>(std::move(promise));
+  }
+  
+  // pragma MARK: std::function<void()>
+  /**
+   * Specialized version of `std::function<void()>`.
+   */
+  using Func_void = std::function<void()>;
+  /**
+   * Wrapper class for a `std::function<void()>`, this can be used from Swift.
+   */
+  class Func_void_Wrapper final {
+  public:
+    explicit Func_void_Wrapper(std::function<void()>&& func): _function(std::make_unique<std::function<void()>>(std::move(func))) {}
+    inline void call() const noexcept {
+      _function->operator()();
+    }
+  private:
+    std::unique_ptr<std::function<void()>> _function;
+  } SWIFT_NONCOPYABLE;
+  Func_void create_Func_void(void* _Nonnull swiftClosureWrapper) noexcept;
+  inline Func_void_Wrapper wrap_Func_void(Func_void value) noexcept {
+    return Func_void_Wrapper(std::move(value));
+  }
+  
+  // pragma MARK: std::function<void(const std::exception_ptr& /* error */)>
+  /**
+   * Specialized version of `std::function<void(const std::exception_ptr&)>`.
+   */
+  using Func_void_std__exception_ptr = std::function<void(const std::exception_ptr& /* error */)>;
+  /**
+   * Wrapper class for a `std::function<void(const std::exception_ptr& / * error * /)>`, this can be used from Swift.
+   */
+  class Func_void_std__exception_ptr_Wrapper final {
+  public:
+    explicit Func_void_std__exception_ptr_Wrapper(std::function<void(const std::exception_ptr& /* error */)>&& func): _function(std::make_unique<std::function<void(const std::exception_ptr& /* error */)>>(std::move(func))) {}
+    inline void call(std::exception_ptr error) const noexcept {
+      _function->operator()(error);
+    }
+  private:
+    std::unique_ptr<std::function<void(const std::exception_ptr& /* error */)>> _function;
+  } SWIFT_NONCOPYABLE;
+  Func_void_std__exception_ptr create_Func_void_std__exception_ptr(void* _Nonnull swiftClosureWrapper) noexcept;
+  inline Func_void_std__exception_ptr_Wrapper wrap_Func_void_std__exception_ptr(Func_void_std__exception_ptr value) noexcept {
+    return Func_void_std__exception_ptr_Wrapper(std::move(value));
+  }
+  
   // pragma MARK: std::shared_ptr<Promise<std::string>>
   /**
    * Specialized version of `std::shared_ptr<Promise<std::string>>`.
@@ -103,28 +132,6 @@ namespace margelo::nitro::sound::bridge::swift {
     return Func_void_std__string_Wrapper(std::move(value));
   }
   
-  // pragma MARK: std::function<void(const std::exception_ptr& /* error */)>
-  /**
-   * Specialized version of `std::function<void(const std::exception_ptr&)>`.
-   */
-  using Func_void_std__exception_ptr = std::function<void(const std::exception_ptr& /* error */)>;
-  /**
-   * Wrapper class for a `std::function<void(const std::exception_ptr& / * error * /)>`, this can be used from Swift.
-   */
-  class Func_void_std__exception_ptr_Wrapper final {
-  public:
-    explicit Func_void_std__exception_ptr_Wrapper(std::function<void(const std::exception_ptr& /* error */)>&& func): _function(std::make_unique<std::function<void(const std::exception_ptr& /* error */)>>(std::move(func))) {}
-    inline void call(std::exception_ptr error) const noexcept {
-      _function->operator()(error);
-    }
-  private:
-    std::unique_ptr<std::function<void(const std::exception_ptr& /* error */)>> _function;
-  } SWIFT_NONCOPYABLE;
-  Func_void_std__exception_ptr create_Func_void_std__exception_ptr(void* _Nonnull swiftClosureWrapper) noexcept;
-  inline Func_void_std__exception_ptr_Wrapper wrap_Func_void_std__exception_ptr(Func_void_std__exception_ptr value) noexcept {
-    return Func_void_std__exception_ptr_Wrapper(std::move(value));
-  }
-  
   // pragma MARK: std::optional<std::string>
   /**
    * Specialized version of `std::optional<std::string>`.
@@ -137,171 +144,6 @@ namespace margelo::nitro::sound::bridge::swift {
     return optional.has_value();
   }
   inline std::string get_std__optional_std__string_(const std::optional<std::string>& optional) noexcept {
-    return *optional;
-  }
-  
-  // pragma MARK: std::optional<AVEncoderAudioQualityIOSType>
-  /**
-   * Specialized version of `std::optional<AVEncoderAudioQualityIOSType>`.
-   */
-  using std__optional_AVEncoderAudioQualityIOSType_ = std::optional<AVEncoderAudioQualityIOSType>;
-  inline std::optional<AVEncoderAudioQualityIOSType> create_std__optional_AVEncoderAudioQualityIOSType_(const AVEncoderAudioQualityIOSType& value) noexcept {
-    return std::optional<AVEncoderAudioQualityIOSType>(value);
-  }
-  inline bool has_value_std__optional_AVEncoderAudioQualityIOSType_(const std::optional<AVEncoderAudioQualityIOSType>& optional) noexcept {
-    return optional.has_value();
-  }
-  inline AVEncoderAudioQualityIOSType get_std__optional_AVEncoderAudioQualityIOSType_(const std::optional<AVEncoderAudioQualityIOSType>& optional) noexcept {
-    return *optional;
-  }
-  
-  // pragma MARK: std::optional<AVModeIOSOption>
-  /**
-   * Specialized version of `std::optional<AVModeIOSOption>`.
-   */
-  using std__optional_AVModeIOSOption_ = std::optional<AVModeIOSOption>;
-  inline std::optional<AVModeIOSOption> create_std__optional_AVModeIOSOption_(const AVModeIOSOption& value) noexcept {
-    return std::optional<AVModeIOSOption>(value);
-  }
-  inline bool has_value_std__optional_AVModeIOSOption_(const std::optional<AVModeIOSOption>& optional) noexcept {
-    return optional.has_value();
-  }
-  inline AVModeIOSOption get_std__optional_AVModeIOSOption_(const std::optional<AVModeIOSOption>& optional) noexcept {
-    return *optional;
-  }
-  
-  // pragma MARK: std::optional<AVEncodingOption>
-  /**
-   * Specialized version of `std::optional<AVEncodingOption>`.
-   */
-  using std__optional_AVEncodingOption_ = std::optional<AVEncodingOption>;
-  inline std::optional<AVEncodingOption> create_std__optional_AVEncodingOption_(const AVEncodingOption& value) noexcept {
-    return std::optional<AVEncodingOption>(value);
-  }
-  inline bool has_value_std__optional_AVEncodingOption_(const std::optional<AVEncodingOption>& optional) noexcept {
-    return optional.has_value();
-  }
-  inline AVEncodingOption get_std__optional_AVEncodingOption_(const std::optional<AVEncodingOption>& optional) noexcept {
-    return *optional;
-  }
-  
-  // pragma MARK: std::optional<double>
-  /**
-   * Specialized version of `std::optional<double>`.
-   */
-  using std__optional_double_ = std::optional<double>;
-  inline std::optional<double> create_std__optional_double_(const double& value) noexcept {
-    return std::optional<double>(value);
-  }
-  inline bool has_value_std__optional_double_(const std::optional<double>& optional) noexcept {
-    return optional.has_value();
-  }
-  inline double get_std__optional_double_(const std::optional<double>& optional) noexcept {
-    return *optional;
-  }
-  
-  // pragma MARK: std::optional<AVLinearPCMBitDepthKeyIOSType>
-  /**
-   * Specialized version of `std::optional<AVLinearPCMBitDepthKeyIOSType>`.
-   */
-  using std__optional_AVLinearPCMBitDepthKeyIOSType_ = std::optional<AVLinearPCMBitDepthKeyIOSType>;
-  inline std::optional<AVLinearPCMBitDepthKeyIOSType> create_std__optional_AVLinearPCMBitDepthKeyIOSType_(const AVLinearPCMBitDepthKeyIOSType& value) noexcept {
-    return std::optional<AVLinearPCMBitDepthKeyIOSType>(value);
-  }
-  inline bool has_value_std__optional_AVLinearPCMBitDepthKeyIOSType_(const std::optional<AVLinearPCMBitDepthKeyIOSType>& optional) noexcept {
-    return optional.has_value();
-  }
-  inline AVLinearPCMBitDepthKeyIOSType get_std__optional_AVLinearPCMBitDepthKeyIOSType_(const std::optional<AVLinearPCMBitDepthKeyIOSType>& optional) noexcept {
-    return *optional;
-  }
-  
-  // pragma MARK: std::optional<bool>
-  /**
-   * Specialized version of `std::optional<bool>`.
-   */
-  using std__optional_bool_ = std::optional<bool>;
-  inline std::optional<bool> create_std__optional_bool_(const bool& value) noexcept {
-    return std::optional<bool>(value);
-  }
-  inline bool has_value_std__optional_bool_(const std::optional<bool>& optional) noexcept {
-    return optional.has_value();
-  }
-  inline bool get_std__optional_bool_(const std::optional<bool>& optional) noexcept {
-    return *optional;
-  }
-  
-  // pragma MARK: std::optional<AudioSourceAndroidType>
-  /**
-   * Specialized version of `std::optional<AudioSourceAndroidType>`.
-   */
-  using std__optional_AudioSourceAndroidType_ = std::optional<AudioSourceAndroidType>;
-  inline std::optional<AudioSourceAndroidType> create_std__optional_AudioSourceAndroidType_(const AudioSourceAndroidType& value) noexcept {
-    return std::optional<AudioSourceAndroidType>(value);
-  }
-  inline bool has_value_std__optional_AudioSourceAndroidType_(const std::optional<AudioSourceAndroidType>& optional) noexcept {
-    return optional.has_value();
-  }
-  inline AudioSourceAndroidType get_std__optional_AudioSourceAndroidType_(const std::optional<AudioSourceAndroidType>& optional) noexcept {
-    return *optional;
-  }
-  
-  // pragma MARK: std::optional<OutputFormatAndroidType>
-  /**
-   * Specialized version of `std::optional<OutputFormatAndroidType>`.
-   */
-  using std__optional_OutputFormatAndroidType_ = std::optional<OutputFormatAndroidType>;
-  inline std::optional<OutputFormatAndroidType> create_std__optional_OutputFormatAndroidType_(const OutputFormatAndroidType& value) noexcept {
-    return std::optional<OutputFormatAndroidType>(value);
-  }
-  inline bool has_value_std__optional_OutputFormatAndroidType_(const std::optional<OutputFormatAndroidType>& optional) noexcept {
-    return optional.has_value();
-  }
-  inline OutputFormatAndroidType get_std__optional_OutputFormatAndroidType_(const std::optional<OutputFormatAndroidType>& optional) noexcept {
-    return *optional;
-  }
-  
-  // pragma MARK: std::optional<AudioEncoderAndroidType>
-  /**
-   * Specialized version of `std::optional<AudioEncoderAndroidType>`.
-   */
-  using std__optional_AudioEncoderAndroidType_ = std::optional<AudioEncoderAndroidType>;
-  inline std::optional<AudioEncoderAndroidType> create_std__optional_AudioEncoderAndroidType_(const AudioEncoderAndroidType& value) noexcept {
-    return std::optional<AudioEncoderAndroidType>(value);
-  }
-  inline bool has_value_std__optional_AudioEncoderAndroidType_(const std::optional<AudioEncoderAndroidType>& optional) noexcept {
-    return optional.has_value();
-  }
-  inline AudioEncoderAndroidType get_std__optional_AudioEncoderAndroidType_(const std::optional<AudioEncoderAndroidType>& optional) noexcept {
-    return *optional;
-  }
-  
-  // pragma MARK: std::optional<AudioQualityType>
-  /**
-   * Specialized version of `std::optional<AudioQualityType>`.
-   */
-  using std__optional_AudioQualityType_ = std::optional<AudioQualityType>;
-  inline std::optional<AudioQualityType> create_std__optional_AudioQualityType_(const AudioQualityType& value) noexcept {
-    return std::optional<AudioQualityType>(value);
-  }
-  inline bool has_value_std__optional_AudioQualityType_(const std::optional<AudioQualityType>& optional) noexcept {
-    return optional.has_value();
-  }
-  inline AudioQualityType get_std__optional_AudioQualityType_(const std::optional<AudioQualityType>& optional) noexcept {
-    return *optional;
-  }
-  
-  // pragma MARK: std::optional<AudioSet>
-  /**
-   * Specialized version of `std::optional<AudioSet>`.
-   */
-  using std__optional_AudioSet_ = std::optional<AudioSet>;
-  inline std::optional<AudioSet> create_std__optional_AudioSet_(const AudioSet& value) noexcept {
-    return std::optional<AudioSet>(value);
-  }
-  inline bool has_value_std__optional_AudioSet_(const std::optional<AudioSet>& optional) noexcept {
-    return optional.has_value();
-  }
-  inline AudioSet get_std__optional_AudioSet_(const std::optional<AudioSet>& optional) noexcept {
     return *optional;
   }
   
@@ -342,6 +184,36 @@ namespace margelo::nitro::sound::bridge::swift {
     return optional.has_value();
   }
   inline std::unordered_map<std::string, std::string> get_std__optional_std__unordered_map_std__string__std__string__(const std::optional<std::unordered_map<std::string, std::string>>& optional) noexcept {
+    return *optional;
+  }
+  
+  // pragma MARK: std::optional<double>
+  /**
+   * Specialized version of `std::optional<double>`.
+   */
+  using std__optional_double_ = std::optional<double>;
+  inline std::optional<double> create_std__optional_double_(const double& value) noexcept {
+    return std::optional<double>(value);
+  }
+  inline bool has_value_std__optional_double_(const std::optional<double>& optional) noexcept {
+    return optional.has_value();
+  }
+  inline double get_std__optional_double_(const std::optional<double>& optional) noexcept {
+    return *optional;
+  }
+  
+  // pragma MARK: std::optional<bool>
+  /**
+   * Specialized version of `std::optional<bool>`.
+   */
+  using std__optional_bool_ = std::optional<bool>;
+  inline std::optional<bool> create_std__optional_bool_(const bool& value) noexcept {
+    return std::optional<bool>(value);
+  }
+  inline bool has_value_std__optional_bool_(const std::optional<bool>& optional) noexcept {
+    return optional.has_value();
+  }
+  inline bool get_std__optional_bool_(const std::optional<bool>& optional) noexcept {
     return *optional;
   }
   
@@ -422,6 +294,15 @@ namespace margelo::nitro::sound::bridge::swift {
   // pragma MARK: std::weak_ptr<HybridSoundSpec>
   using std__weak_ptr_HybridSoundSpec_ = std::weak_ptr<HybridSoundSpec>;
   inline std__weak_ptr_HybridSoundSpec_ weakify_std__shared_ptr_HybridSoundSpec_(const std::shared_ptr<HybridSoundSpec>& strong) noexcept { return strong; }
+  
+  // pragma MARK: Result<std::shared_ptr<Promise<void>>>
+  using Result_std__shared_ptr_Promise_void___ = Result<std::shared_ptr<Promise<void>>>;
+  inline Result_std__shared_ptr_Promise_void___ create_Result_std__shared_ptr_Promise_void___(const std::shared_ptr<Promise<void>>& value) noexcept {
+    return Result<std::shared_ptr<Promise<void>>>::withValue(value);
+  }
+  inline Result_std__shared_ptr_Promise_void___ create_Result_std__shared_ptr_Promise_void___(const std::exception_ptr& error) noexcept {
+    return Result<std::shared_ptr<Promise<void>>>::withError(error);
+  }
   
   // pragma MARK: Result<std::shared_ptr<Promise<std::string>>>
   using Result_std__shared_ptr_Promise_std__string___ = Result<std::shared_ptr<Promise<std::string>>>;

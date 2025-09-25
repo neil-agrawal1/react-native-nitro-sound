@@ -53,10 +53,10 @@ namespace margelo::nitro::sound {
 
   public:
     // Methods
-    std::shared_ptr<Promise<std::string>> startRecorder(const std::optional<std::string>& uri, const std::optional<AudioSet>& audioSets, std::optional<bool> meteringEnabled) override;
+    std::shared_ptr<Promise<void>> startRecorder() override;
+    std::shared_ptr<Promise<void>> stopRecorder() override;
     std::shared_ptr<Promise<std::string>> pauseRecorder() override;
     std::shared_ptr<Promise<std::string>> resumeRecorder() override;
-    std::shared_ptr<Promise<std::string>> stopRecorder() override;
     std::shared_ptr<Promise<std::string>> startPlayer(const std::optional<std::string>& uri, const std::optional<std::unordered_map<std::string, std::string>>& httpHeaders) override;
     std::shared_ptr<Promise<std::string>> stopPlayer() override;
     std::shared_ptr<Promise<std::string>> pausePlayer() override;
@@ -64,6 +64,8 @@ namespace margelo::nitro::sound {
     std::shared_ptr<Promise<std::string>> seekToPlayer(double time) override;
     std::shared_ptr<Promise<std::string>> setVolume(double volume) override;
     std::shared_ptr<Promise<std::string>> setPlaybackSpeed(double playbackSpeed) override;
+    std::shared_ptr<Promise<std::string>> setLoopEnabled(bool enabled) override;
+    std::shared_ptr<Promise<std::string>> crossfadeTo(const std::string& uri, std::optional<double> duration) override;
     void setSubscriptionDuration(double sec) override;
     void addRecordBackListener(const std::function<void(const RecordBackType& /* recordingMeta */)>& callback) override;
     void removeRecordBackListener() override;
@@ -71,6 +73,7 @@ namespace margelo::nitro::sound {
     void removePlayBackListener() override;
     void addPlaybackEndListener(const std::function<void(const PlaybackEndType& /* playbackEndMeta */)>& callback) override;
     void removePlaybackEndListener() override;
+    void setLogCallback(const std::function<void(const std::string& /* message */)>& callback) override;
     std::string mmss(double secs) override;
     std::string mmssss(double milisecs) override;
 

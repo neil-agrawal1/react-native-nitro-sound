@@ -4,11 +4,10 @@
   "description": "React Native Sound Module 🔥 by Nitro",
   "homepage": "https://github.com/hyochan/react-native-nitro-sound",
   "main": "./lib/module/index.js",
-  "types": "./lib/typescript/src/index.d.ts",
+  "types": "./lib/typescript/index.d.ts",
   "exports": {
     ".": {
-      "source": "./src/index.tsx",
-      "types": "./lib/typescript/src/index.d.ts",
+      "types": "./lib/typescript/index.d.ts",
       "default": "./lib/module/index.js",
       "react-native": "./src/index.tsx",
       "browser": "./lib/module/index.web.js"
@@ -37,20 +36,20 @@
     "!**/.*"
   ],
   "scripts": {
-    "example": "yarn workspace react-native-nitro-sound-example",
     "test": "jest",
     "typecheck": "tsc",
     "lint": "eslint \"**/*.{js,ts,tsx}\"",
     "lint:fix": "eslint \"**/*.{js,ts,tsx}\" --fix",
     "clean": "del-cli android/build example/android/build example/android/app/build example/ios/build lib",
-    "prepare": "husky install && npx tsx scripts/check-nitro-versions.ts && bob build && yarn nitrogen",
+    "prepare": "mkdir -p lib/typescript && echo '{\"name\":\"react-native-nitro-sound-types\"}' > lib/typescript/package.json && npm run build",  
+    "prebuild": "mkdir -p lib/typescript && echo '{\"name\":\"react-native-nitro-sound-types\"}' > lib/typescript/package.json",
+    "build": "bob build && npm run nitrogen",
     "nitrogen": "npx nitrogen",
-    "release": "release-it --only-version",
-    "web": "yarn workspace react-native-nitro-sound-example web",
-    "build:web": "yarn workspace react-native-nitro-sound-example build:web",
-    "android": "yarn workspace react-native-nitro-sound-example android",
-    "ios": "yarn workspace react-native-nitro-sound-example ios",
-    "start": "yarn workspace react-native-nitro-sound-example start",
+    "android": "cd example && npm run android",
+    "ios": "cd example && npm run ios",
+    "start": "cd example && npm start",
+    "web": "cd example && npm run web",
+    "build:web": "cd example && npm run build:web",
     "logcat": "adb logcat -c && adb logcat --pid=$(adb shell pidof sound.example)"
   },
   "keywords": [

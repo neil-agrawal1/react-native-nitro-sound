@@ -13,8 +13,6 @@
 #error NitroModules cannot be found! Are you sure you installed NitroModules properly?
 #endif
 
-// Forward declaration of `AudioSet` to properly resolve imports.
-namespace margelo::nitro::sound { struct AudioSet; }
 // Forward declaration of `RecordBackType` to properly resolve imports.
 namespace margelo::nitro::sound { struct RecordBackType; }
 // Forward declaration of `PlayBackType` to properly resolve imports.
@@ -22,10 +20,9 @@ namespace margelo::nitro::sound { struct PlayBackType; }
 // Forward declaration of `PlaybackEndType` to properly resolve imports.
 namespace margelo::nitro::sound { struct PlaybackEndType; }
 
-#include <string>
 #include <NitroModules/Promise.hpp>
+#include <string>
 #include <optional>
-#include "AudioSet.hpp"
 #include <unordered_map>
 #include "RecordBackType.hpp"
 #include <functional>
@@ -63,10 +60,10 @@ namespace margelo::nitro::sound {
 
     public:
       // Methods
-      virtual std::shared_ptr<Promise<std::string>> startRecorder(const std::optional<std::string>& uri, const std::optional<AudioSet>& audioSets, std::optional<bool> meteringEnabled) = 0;
+      virtual std::shared_ptr<Promise<void>> startRecorder() = 0;
+      virtual std::shared_ptr<Promise<void>> stopRecorder() = 0;
       virtual std::shared_ptr<Promise<std::string>> pauseRecorder() = 0;
       virtual std::shared_ptr<Promise<std::string>> resumeRecorder() = 0;
-      virtual std::shared_ptr<Promise<std::string>> stopRecorder() = 0;
       virtual std::shared_ptr<Promise<std::string>> startPlayer(const std::optional<std::string>& uri, const std::optional<std::unordered_map<std::string, std::string>>& httpHeaders) = 0;
       virtual std::shared_ptr<Promise<std::string>> stopPlayer() = 0;
       virtual std::shared_ptr<Promise<std::string>> pausePlayer() = 0;
@@ -74,6 +71,8 @@ namespace margelo::nitro::sound {
       virtual std::shared_ptr<Promise<std::string>> seekToPlayer(double time) = 0;
       virtual std::shared_ptr<Promise<std::string>> setVolume(double volume) = 0;
       virtual std::shared_ptr<Promise<std::string>> setPlaybackSpeed(double playbackSpeed) = 0;
+      virtual std::shared_ptr<Promise<std::string>> setLoopEnabled(bool enabled) = 0;
+      virtual std::shared_ptr<Promise<std::string>> crossfadeTo(const std::string& uri, std::optional<double> duration) = 0;
       virtual void setSubscriptionDuration(double sec) = 0;
       virtual void addRecordBackListener(const std::function<void(const RecordBackType& /* recordingMeta */)>& callback) = 0;
       virtual void removeRecordBackListener() = 0;
@@ -81,6 +80,7 @@ namespace margelo::nitro::sound {
       virtual void removePlayBackListener() = 0;
       virtual void addPlaybackEndListener(const std::function<void(const PlaybackEndType& /* playbackEndMeta */)>& callback) = 0;
       virtual void removePlaybackEndListener() = 0;
+      virtual void setLogCallback(const std::function<void(const std::string& /* message */)>& callback) = 0;
       virtual std::string mmss(double secs) = 0;
       virtual std::string mmssss(double milisecs) = 0;
 

@@ -12,24 +12,6 @@
 // Forward declaration of `HybridSoundSpec_cxx` to properly resolve imports.
 namespace NitroSound { class HybridSoundSpec_cxx; }
 
-// Forward declaration of `AudioSet` to properly resolve imports.
-namespace margelo::nitro::sound { struct AudioSet; }
-// Forward declaration of `AVEncoderAudioQualityIOSType` to properly resolve imports.
-namespace margelo::nitro::sound { enum class AVEncoderAudioQualityIOSType; }
-// Forward declaration of `AVModeIOSOption` to properly resolve imports.
-namespace margelo::nitro::sound { enum class AVModeIOSOption; }
-// Forward declaration of `AVEncodingOption` to properly resolve imports.
-namespace margelo::nitro::sound { enum class AVEncodingOption; }
-// Forward declaration of `AVLinearPCMBitDepthKeyIOSType` to properly resolve imports.
-namespace margelo::nitro::sound { enum class AVLinearPCMBitDepthKeyIOSType; }
-// Forward declaration of `AudioSourceAndroidType` to properly resolve imports.
-namespace margelo::nitro::sound { enum class AudioSourceAndroidType; }
-// Forward declaration of `OutputFormatAndroidType` to properly resolve imports.
-namespace margelo::nitro::sound { enum class OutputFormatAndroidType; }
-// Forward declaration of `AudioEncoderAndroidType` to properly resolve imports.
-namespace margelo::nitro::sound { enum class AudioEncoderAndroidType; }
-// Forward declaration of `AudioQualityType` to properly resolve imports.
-namespace margelo::nitro::sound { enum class AudioQualityType; }
 // Forward declaration of `RecordBackType` to properly resolve imports.
 namespace margelo::nitro::sound { struct RecordBackType; }
 // Forward declaration of `PlayBackType` to properly resolve imports.
@@ -37,18 +19,9 @@ namespace margelo::nitro::sound { struct PlayBackType; }
 // Forward declaration of `PlaybackEndType` to properly resolve imports.
 namespace margelo::nitro::sound { struct PlaybackEndType; }
 
-#include <string>
 #include <NitroModules/Promise.hpp>
+#include <string>
 #include <optional>
-#include "AudioSet.hpp"
-#include "AVEncoderAudioQualityIOSType.hpp"
-#include "AVModeIOSOption.hpp"
-#include "AVEncodingOption.hpp"
-#include "AVLinearPCMBitDepthKeyIOSType.hpp"
-#include "AudioSourceAndroidType.hpp"
-#include "OutputFormatAndroidType.hpp"
-#include "AudioEncoderAndroidType.hpp"
-#include "AudioQualityType.hpp"
 #include <unordered_map>
 #include "RecordBackType.hpp"
 #include <functional>
@@ -96,8 +69,16 @@ namespace margelo::nitro::sound {
 
   public:
     // Methods
-    inline std::shared_ptr<Promise<std::string>> startRecorder(const std::optional<std::string>& uri, const std::optional<AudioSet>& audioSets, std::optional<bool> meteringEnabled) override {
-      auto __result = _swiftPart.startRecorder(uri, audioSets, meteringEnabled);
+    inline std::shared_ptr<Promise<void>> startRecorder() override {
+      auto __result = _swiftPart.startRecorder();
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+      auto __value = std::move(__result.value());
+      return __value;
+    }
+    inline std::shared_ptr<Promise<void>> stopRecorder() override {
+      auto __result = _swiftPart.stopRecorder();
       if (__result.hasError()) [[unlikely]] {
         std::rethrow_exception(__result.error());
       }
@@ -114,14 +95,6 @@ namespace margelo::nitro::sound {
     }
     inline std::shared_ptr<Promise<std::string>> resumeRecorder() override {
       auto __result = _swiftPart.resumeRecorder();
-      if (__result.hasError()) [[unlikely]] {
-        std::rethrow_exception(__result.error());
-      }
-      auto __value = std::move(__result.value());
-      return __value;
-    }
-    inline std::shared_ptr<Promise<std::string>> stopRecorder() override {
-      auto __result = _swiftPart.stopRecorder();
       if (__result.hasError()) [[unlikely]] {
         std::rethrow_exception(__result.error());
       }
@@ -184,6 +157,22 @@ namespace margelo::nitro::sound {
       auto __value = std::move(__result.value());
       return __value;
     }
+    inline std::shared_ptr<Promise<std::string>> setLoopEnabled(bool enabled) override {
+      auto __result = _swiftPart.setLoopEnabled(std::forward<decltype(enabled)>(enabled));
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+      auto __value = std::move(__result.value());
+      return __value;
+    }
+    inline std::shared_ptr<Promise<std::string>> crossfadeTo(const std::string& uri, std::optional<double> duration) override {
+      auto __result = _swiftPart.crossfadeTo(uri, duration);
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+      auto __value = std::move(__result.value());
+      return __value;
+    }
     inline void setSubscriptionDuration(double sec) override {
       auto __result = _swiftPart.setSubscriptionDuration(std::forward<decltype(sec)>(sec));
       if (__result.hasError()) [[unlikely]] {
@@ -222,6 +211,12 @@ namespace margelo::nitro::sound {
     }
     inline void removePlaybackEndListener() override {
       auto __result = _swiftPart.removePlaybackEndListener();
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+    }
+    inline void setLogCallback(const std::function<void(const std::string& /* message */)>& callback) override {
+      auto __result = _swiftPart.setLogCallback(callback);
       if (__result.hasError()) [[unlikely]] {
         std::rethrow_exception(__result.error());
       }

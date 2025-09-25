@@ -8,26 +8,8 @@
 #pragma once
 
 // Forward declarations of C++ defined types
-// Forward declaration of `AVEncoderAudioQualityIOSType` to properly resolve imports.
-namespace margelo::nitro::sound { enum class AVEncoderAudioQualityIOSType; }
-// Forward declaration of `AVEncodingOption` to properly resolve imports.
-namespace margelo::nitro::sound { enum class AVEncodingOption; }
-// Forward declaration of `AVLinearPCMBitDepthKeyIOSType` to properly resolve imports.
-namespace margelo::nitro::sound { enum class AVLinearPCMBitDepthKeyIOSType; }
-// Forward declaration of `AVModeIOSOption` to properly resolve imports.
-namespace margelo::nitro::sound { enum class AVModeIOSOption; }
-// Forward declaration of `AudioEncoderAndroidType` to properly resolve imports.
-namespace margelo::nitro::sound { enum class AudioEncoderAndroidType; }
-// Forward declaration of `AudioQualityType` to properly resolve imports.
-namespace margelo::nitro::sound { enum class AudioQualityType; }
-// Forward declaration of `AudioSet` to properly resolve imports.
-namespace margelo::nitro::sound { struct AudioSet; }
-// Forward declaration of `AudioSourceAndroidType` to properly resolve imports.
-namespace margelo::nitro::sound { enum class AudioSourceAndroidType; }
 // Forward declaration of `HybridSoundSpec` to properly resolve imports.
 namespace margelo::nitro::sound { class HybridSoundSpec; }
-// Forward declaration of `OutputFormatAndroidType` to properly resolve imports.
-namespace margelo::nitro::sound { enum class OutputFormatAndroidType; }
 // Forward declaration of `PlayBackType` to properly resolve imports.
 namespace margelo::nitro::sound { struct PlayBackType; }
 // Forward declaration of `PlaybackEndType` to properly resolve imports.
@@ -36,16 +18,7 @@ namespace margelo::nitro::sound { struct PlaybackEndType; }
 namespace margelo::nitro::sound { struct RecordBackType; }
 
 // Include C++ defined types
-#include "AVEncoderAudioQualityIOSType.hpp"
-#include "AVEncodingOption.hpp"
-#include "AVLinearPCMBitDepthKeyIOSType.hpp"
-#include "AVModeIOSOption.hpp"
-#include "AudioEncoderAndroidType.hpp"
-#include "AudioQualityType.hpp"
-#include "AudioSet.hpp"
-#include "AudioSourceAndroidType.hpp"
 #include "HybridSoundSpec.hpp"
-#include "OutputFormatAndroidType.hpp"
 #include "PlayBackType.hpp"
 #include "PlaybackEndType.hpp"
 #include "RecordBackType.hpp"

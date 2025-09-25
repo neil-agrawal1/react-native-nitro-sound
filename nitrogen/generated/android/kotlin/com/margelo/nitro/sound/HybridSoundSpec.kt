@@ -42,7 +42,11 @@ abstract class HybridSoundSpec: HybridObject() {
   // Methods
   @DoNotStrip
   @Keep
-  abstract fun startRecorder(uri: String?, audioSets: AudioSet?, meteringEnabled: Boolean?): Promise<String>
+  abstract fun startRecorder(): Promise<Unit>
+  
+  @DoNotStrip
+  @Keep
+  abstract fun stopRecorder(): Promise<Unit>
   
   @DoNotStrip
   @Keep
@@ -51,10 +55,6 @@ abstract class HybridSoundSpec: HybridObject() {
   @DoNotStrip
   @Keep
   abstract fun resumeRecorder(): Promise<String>
-  
-  @DoNotStrip
-  @Keep
-  abstract fun stopRecorder(): Promise<String>
   
   @DoNotStrip
   @Keep
@@ -83,6 +83,14 @@ abstract class HybridSoundSpec: HybridObject() {
   @DoNotStrip
   @Keep
   abstract fun setPlaybackSpeed(playbackSpeed: Double): Promise<String>
+  
+  @DoNotStrip
+  @Keep
+  abstract fun setLoopEnabled(enabled: Boolean): Promise<String>
+  
+  @DoNotStrip
+  @Keep
+  abstract fun crossfadeTo(uri: String, duration: Double?): Promise<String>
   
   @DoNotStrip
   @Keep
@@ -126,6 +134,15 @@ abstract class HybridSoundSpec: HybridObject() {
   @DoNotStrip
   @Keep
   abstract fun removePlaybackEndListener(): Unit
+  
+  abstract fun setLogCallback(callback: (message: String) -> Unit): Unit
+  
+  @DoNotStrip
+  @Keep
+  private fun setLogCallback_cxx(callback: Func_void_std__string): Unit {
+    val __result = setLogCallback(callback)
+    return __result
+  }
   
   @DoNotStrip
   @Keep

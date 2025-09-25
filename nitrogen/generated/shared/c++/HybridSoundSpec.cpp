@@ -15,9 +15,9 @@ namespace margelo::nitro::sound {
     // load custom methods/properties
     registerHybrids(this, [](Prototype& prototype) {
       prototype.registerHybridMethod("startRecorder", &HybridSoundSpec::startRecorder);
+      prototype.registerHybridMethod("stopRecorder", &HybridSoundSpec::stopRecorder);
       prototype.registerHybridMethod("pauseRecorder", &HybridSoundSpec::pauseRecorder);
       prototype.registerHybridMethod("resumeRecorder", &HybridSoundSpec::resumeRecorder);
-      prototype.registerHybridMethod("stopRecorder", &HybridSoundSpec::stopRecorder);
       prototype.registerHybridMethod("startPlayer", &HybridSoundSpec::startPlayer);
       prototype.registerHybridMethod("stopPlayer", &HybridSoundSpec::stopPlayer);
       prototype.registerHybridMethod("pausePlayer", &HybridSoundSpec::pausePlayer);
@@ -25,6 +25,8 @@ namespace margelo::nitro::sound {
       prototype.registerHybridMethod("seekToPlayer", &HybridSoundSpec::seekToPlayer);
       prototype.registerHybridMethod("setVolume", &HybridSoundSpec::setVolume);
       prototype.registerHybridMethod("setPlaybackSpeed", &HybridSoundSpec::setPlaybackSpeed);
+      prototype.registerHybridMethod("setLoopEnabled", &HybridSoundSpec::setLoopEnabled);
+      prototype.registerHybridMethod("crossfadeTo", &HybridSoundSpec::crossfadeTo);
       prototype.registerHybridMethod("setSubscriptionDuration", &HybridSoundSpec::setSubscriptionDuration);
       prototype.registerHybridMethod("addRecordBackListener", &HybridSoundSpec::addRecordBackListener);
       prototype.registerHybridMethod("removeRecordBackListener", &HybridSoundSpec::removeRecordBackListener);
@@ -32,6 +34,7 @@ namespace margelo::nitro::sound {
       prototype.registerHybridMethod("removePlayBackListener", &HybridSoundSpec::removePlayBackListener);
       prototype.registerHybridMethod("addPlaybackEndListener", &HybridSoundSpec::addPlaybackEndListener);
       prototype.registerHybridMethod("removePlaybackEndListener", &HybridSoundSpec::removePlaybackEndListener);
+      prototype.registerHybridMethod("setLogCallback", &HybridSoundSpec::setLogCallback);
       prototype.registerHybridMethod("mmss", &HybridSoundSpec::mmss);
       prototype.registerHybridMethod("mmssss", &HybridSoundSpec::mmssss);
     });
