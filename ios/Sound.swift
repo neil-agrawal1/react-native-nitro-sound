@@ -1057,7 +1057,6 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
 
     // MARK: - AVAudioPlayerDelegate via proxy
     deinit {
-        recordTimer?.invalidate()
         playTimer?.invalidate()
         crossfadeTimer?.invalidate()
 
