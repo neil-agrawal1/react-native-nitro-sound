@@ -4,10 +4,10 @@
   "description": "React Native Sound Module 🔥 by Nitro",
   "homepage": "https://github.com/hyochan/react-native-nitro-sound",
   "main": "./lib/module/index.js",
-  "types": "./lib/typescript/index.d.ts",
+  "types": "./lib/typescript/src/index.d.ts",
   "exports": {
     ".": {
-      "types": "./lib/typescript/index.d.ts",
+      "types": "./lib/typescript/src/index.d.ts",
       "default": "./lib/module/index.js",
       "react-native": "./src/index.tsx",
       "browser": "./lib/module/index.web.js"
@@ -40,7 +40,7 @@
     "lint": "eslint \"**/*.{js,ts,tsx}\"",
     "lint:fix": "eslint \"**/*.{js,ts,tsx}\" --fix",
     "clean": "del-cli android/build example/android/build example/android/app/build example/ios/build lib",
-    "build": "bob build && npm run nitrogen && npm run fix-types",
+    "build": "mkdir -p lib/typescript && bob build && npm run nitrogen",
     "prepare": "npm run build",
     "fix-types": "mkdir -p lib/typescript && echo '{\"name\":\"react-native-nitro-sound-types\"}' > lib/typescript/package.json",
     "nitrogen": "npx nitrogen",
