@@ -148,23 +148,6 @@ import SoundAnalysis
         self.bridgedLog("🎵 Playback completed (non-looping)")
     }
 
-    private func handleLoopingPlaybackCompletion() {
-        // Handle looping playback - restart the same file
-        self.bridgedLog("🔄 Looping playback completed, restarting...")
-
-        if shouldLoopPlayback, let uri = currentPlaybackURI {
-            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-                do {
-                    _ = try self?.startPlayer(uri: uri, httpHeaders: nil)
-                } catch {
-                    self?.bridgedLog("🎵 ❌ Failed to restart looped playback: \(error.localizedDescription)")
-                }
-            }
-        } else {
-            // Looping was disabled or no URI to restart
-            handlePlaybackCompletion()
-        }
-    }
 
     // MARK: - Recording Methods
 
@@ -531,39 +514,51 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                 // Stop any current playback on this node
                 playerNode.stop()
 
-                // Schedule file for playback
+                // Load entire file into buffer for seamless looping
+                let frameCount = AVAudioFrameCount(audioFile.length)
+                guard let audioBuffer = AVAudioPCMBuffer(pcmFormat: audioFile.processingFormat, frameCapacity: frameCount) else {
+                    promise.reject(withError: RuntimeError.error(withMessage: "Failed to create audio buffer"))
+                    return
+                }
+
+                // Read the entire file into the buffer
+                try audioFile.read(into: audioBuffer)
+                audioBuffer.frameLength = frameCount
+                self.bridgedLog("🎵 Loaded \(frameCount) frames into buffer for playback")
+
+                // Set volume
+                playerNode.volume = 1.0
+
+                // Schedule buffer for playback
                 if self.shouldLoopPlayback {
-                    // For looping: restart on completion
-                    playerNode.scheduleFile(audioFile, at: nil) { [weak self] in
-                        DispatchQueue.main.async {
-                            self?.handleLoopingPlaybackCompletion()
+                    // Seamless looping: recursively schedule buffer
+                    func scheduleLoop() {
+                        playerNode.scheduleBuffer(audioBuffer, at: nil, options: .loops) { [weak self] in
+                            // This should never be called with .loops option
+                            // But keep as fallback
+                            DispatchQueue.main.async {
+                                self?.bridgedLog("🔄 Loop completion handler called (unexpected)")
+                                scheduleLoop()
+                            }
                         }
                     }
-                    self.bridgedLog("🔄 File scheduled for looping playback")
+                    scheduleLoop()
+                    self.bridgedLog("🔄 Buffer scheduled for seamless looping")
                 } else {
-                    // Non-looping: schedule file with completion
-                    playerNode.scheduleFile(audioFile, at: nil) { [weak self] in
+                    // Non-looping: schedule buffer with completion
+                    playerNode.scheduleBuffer(audioBuffer, at: nil) { [weak self] in
                         DispatchQueue.main.async {
                             self?.handlePlaybackCompletion()
                         }
                     }
                 }
 
-                // Set volume
-                playerNode.volume = 1.0
-
                 // Play on main queue
                 DispatchQueue.main.async {
                     self.didEmitPlaybackEnd = false
                     self.startPlayTimer()
                     playerNode.play()
-
-                    // Set repeat mode after starting playback
-                    if self.shouldLoopPlayback {
-                        // Note: RepeatMode is handled by TrackPlayer, not AVAudioPlayerNode
-                        // For AVAudioPlayerNode, we'd need to handle looping manually in completion
-                        self.bridgedLog("🔄 Looping enabled (will repeat on completion)")
-                    }
+                    self.bridgedLog("🎵 Playback started")
 
                     promise.resolve(withResult: uri)
                 }
@@ -575,51 +570,6 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
         }
 
         return promise
-    }
-
-    private func trimSilence(from buffer: AVAudioPCMBuffer,
-                            threshold: Float = 0.0001) -> AVAudioPCMBuffer? {
-        guard let channelData = buffer.floatChannelData?[0] else { return nil }
-        let frameLength = Int(buffer.frameLength)
-
-        var start = 0
-        var end = frameLength - 1
-
-        // Find first non-silent frame
-        while start < frameLength && abs(channelData[start]) < threshold {
-            start += 1
-        }
-
-        // Find last non-silent frame
-        while end > start && abs(channelData[end]) < threshold {
-            end -= 1
-        }
-
-        let newFrameCount = end - start + 1
-        guard newFrameCount > 0 else { return nil }
-
-        guard let trimmedBuffer = AVAudioPCMBuffer(pcmFormat: buffer.format,
-                                                frameCapacity: AVAudioFrameCount(newFrameCount)) else {
-            return nil
-        }
-
-        trimmedBuffer.frameLength = AVAudioFrameCount(newFrameCount)
-
-        let src = channelData.advanced(by: start)
-        memcpy(trimmedBuffer.floatChannelData![0],
-            src,
-            newFrameCount * MemoryLayout<Float>.size)
-
-        // If stereo, copy the second channel too
-        if buffer.format.channelCount > 1,
-        let srcRight = buffer.floatChannelData?[1],
-        let dstRight = trimmedBuffer.floatChannelData?[1] {
-            memcpy(dstRight,
-                srcRight.advanced(by: start),
-                newFrameCount * MemoryLayout<Float>.size)
-        }
-
-        return trimmedBuffer
     }
 
 
