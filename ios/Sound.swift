@@ -148,6 +148,22 @@ import SoundAnalysis
         self.bridgedLog("🎵 Playback completed (non-looping)")
     }
 
+    private func scheduleMoreLoops(audioFile: AVAudioFile, playerNode: AVAudioPlayerNode) {
+        guard self.shouldLoopPlayback else {
+            self.bridgedLog("🔄 Loop scheduling cancelled (looping disabled)")
+            return
+        }
+
+        // Schedule 3 more iterations
+        playerNode.scheduleFile(audioFile, at: nil, completionHandler: nil)
+        playerNode.scheduleFile(audioFile, at: nil, completionHandler: nil)
+        playerNode.scheduleFile(audioFile, at: nil) { [weak self] in
+            // Recursive scheduling for continuous looping
+            self?.scheduleMoreLoops(audioFile: audioFile, playerNode: playerNode)
+        }
+        self.bridgedLog("🔄 Scheduled 3 more loop iterations")
+    }
+
 
     // MARK: - Recording Methods
 
@@ -514,39 +530,22 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                 // Stop any current playback on this node
                 playerNode.stop()
 
-                // Load entire file into buffer for seamless looping
-                let frameCount = AVAudioFrameCount(audioFile.length)
-                guard let audioBuffer = AVAudioPCMBuffer(pcmFormat: audioFile.processingFormat, frameCapacity: frameCount) else {
-                    promise.reject(withError: RuntimeError.error(withMessage: "Failed to create audio buffer"))
-                    return
-                }
-
-                // Read the entire file into the buffer
-                try audioFile.read(into: audioBuffer)
-                audioBuffer.frameLength = frameCount
-                self.bridgedLog("🎵 Loaded \(frameCount) frames into buffer for playback")
-
                 // Set volume
                 playerNode.volume = 1.0
 
-                // Schedule buffer for playback
+                // Schedule file for playback
                 if self.shouldLoopPlayback {
-                    // Seamless looping: recursively schedule buffer
-                    func scheduleLoop() {
-                        playerNode.scheduleBuffer(audioBuffer, at: nil, options: .loops) { [weak self] in
-                            // This should never be called with .loops option
-                            // But keep as fallback
-                            DispatchQueue.main.async {
-                                self?.bridgedLog("🔄 Loop completion handler called (unexpected)")
-                                scheduleLoop()
-                            }
-                        }
+                    // Pre-schedule multiple iterations for seamless looping
+                    playerNode.scheduleFile(audioFile, at: nil, completionHandler: nil)
+                    playerNode.scheduleFile(audioFile, at: nil, completionHandler: nil)
+                    playerNode.scheduleFile(audioFile, at: nil) { [weak self] in
+                        // When 3rd iteration completes, schedule 3 more
+                        self?.scheduleMoreLoops(audioFile: audioFile, playerNode: playerNode)
                     }
-                    scheduleLoop()
-                    self.bridgedLog("🔄 Buffer scheduled for seamless looping")
+                    self.bridgedLog("🔄 File scheduled for seamless looping (3 iterations pre-scheduled)")
                 } else {
-                    // Non-looping: schedule buffer with completion
-                    playerNode.scheduleBuffer(audioBuffer, at: nil) { [weak self] in
+                    // Non-looping: schedule file with completion
+                    playerNode.scheduleFile(audioFile, at: nil) { [weak self] in
                         DispatchQueue.main.async {
                             self?.handlePlaybackCompletion()
                         }
@@ -558,7 +557,7 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                     self.didEmitPlaybackEnd = false
                     self.startPlayTimer()
                     playerNode.play()
-                    self.bridgedLog("🎵 Playback started")
+                    self.bridgedLog("🎵 Playback started (file-based)")
 
                     promise.resolve(withResult: uri)
                 }
@@ -818,9 +817,23 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                 // Prepare new node
                 newNode.stop()
                 newNode.volume = 0.0
-                newNode.scheduleFile(audioFile, at: nil) { [weak self] in
-                    self?.handlePlaybackCompletion()
+
+                // Schedule file(s) for playback
+                if self.shouldLoopPlayback {
+                    // Pre-schedule multiple iterations for seamless looping
+                    newNode.scheduleFile(audioFile, at: nil, completionHandler: nil)
+                    newNode.scheduleFile(audioFile, at: nil, completionHandler: nil)
+                    newNode.scheduleFile(audioFile, at: nil) { [weak self] in
+                        // When 3rd iteration completes, schedule 3 more
+                        self?.scheduleMoreLoops(audioFile: audioFile, playerNode: newNode)
+                    }
+                    self.bridgedLog("🔄 Crossfade target scheduled for looping")
+                } else {
+                    newNode.scheduleFile(audioFile, at: nil) { [weak self] in
+                        self?.handlePlaybackCompletion()
+                    }
                 }
+
                 newNode.play()
 
                 // Start fading
