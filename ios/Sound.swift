@@ -68,6 +68,9 @@ import SoundAnalysis
     // Log callback to bridge Swift logs to JavaScript
     private var logCallback: ((String) -> Void)?
 
+    // Segment callback to notify JavaScript when a new file is written
+    private var segmentCallback: ((String, String) -> Void)?
+
     // MARK: - Unified Audio Engine Management
 
     private func initializeAudioEngine() throws {
@@ -273,6 +276,7 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
 
         // Get file info before closing
         let filename = segmentFile.url.lastPathComponent
+        let filePath = segmentFile.url.path
         let frameCount = segmentFile.length
         let sampleRate = segmentFile.fileFormat.sampleRate
         let duration = Double(frameCount) / sampleRate
@@ -282,7 +286,11 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
 
         self.bridgedLog("🎙️ ✅ Ended speech segment: \(filename) (\(String(format: "%.1f", duration))s)")
 
-        // File is written to documents/speech_segments/ - JavaScript will poll for new files
+        // Notify JavaScript via callback
+        if let callback = self.segmentCallback {
+            callback(filename, filePath)
+            self.bridgedLog("📡 Notified JS of new segment: \(filename)")
+        }
 
         silenceCounter = 0
     }
@@ -727,6 +735,11 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
 
     public func setLogCallback(callback: @escaping (String) -> Void) throws {
         self.logCallback = callback
+    }
+
+    public func setSegmentCallback(callback: @escaping (String, String) -> Void) throws {
+        self.segmentCallback = callback
+        bridgedLog("✅ Segment callback registered")
     }
 
     private func bridgedLog(_ message: String) {

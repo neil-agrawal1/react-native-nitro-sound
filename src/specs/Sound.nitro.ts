@@ -108,6 +108,9 @@ export interface Sound
   // Logging methods
   setLogCallback(callback: (message: string) => void): void;
 
+  // Speech segment callback (called when a new segment file is written)
+  setSegmentCallback(callback: (filename: string, filePath: string) => void): void;
+
   // Utility methods
   mmss(secs: number): string;
   mmssss(milisecs: number): string;
