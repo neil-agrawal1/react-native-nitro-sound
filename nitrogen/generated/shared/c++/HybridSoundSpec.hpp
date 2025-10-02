@@ -81,6 +81,7 @@ namespace margelo::nitro::sound {
       virtual void addPlaybackEndListener(const std::function<void(const PlaybackEndType& /* playbackEndMeta */)>& callback) = 0;
       virtual void removePlaybackEndListener() = 0;
       virtual void setLogCallback(const std::function<void(const std::string& /* message */)>& callback) = 0;
+      virtual void setSegmentCallback(const std::function<void(const std::string& /* filename */, const std::string& /* filePath */)>& callback) = 0;
       virtual std::string mmss(double secs) = 0;
       virtual std::string mmssss(double milisecs) = 0;
 

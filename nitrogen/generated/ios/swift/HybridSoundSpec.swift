@@ -35,6 +35,7 @@ public protocol HybridSoundSpec_protocol: HybridObject {
   func addPlaybackEndListener(callback: @escaping (_ playbackEndMeta: PlaybackEndType) -> Void) throws -> Void
   func removePlaybackEndListener() throws -> Void
   func setLogCallback(callback: @escaping (_ message: String) -> Void) throws -> Void
+  func setSegmentCallback(callback: @escaping (_ filename: String, _ filePath: String) -> Void) throws -> Void
   func mmss(secs: Double) throws -> String
   func mmssss(milisecs: Double) throws -> String
 }

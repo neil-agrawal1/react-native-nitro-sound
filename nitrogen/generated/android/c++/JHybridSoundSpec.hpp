@@ -74,6 +74,7 @@ namespace margelo::nitro::sound {
     void addPlaybackEndListener(const std::function<void(const PlaybackEndType& /* playbackEndMeta */)>& callback) override;
     void removePlaybackEndListener() override;
     void setLogCallback(const std::function<void(const std::string& /* message */)>& callback) override;
+    void setSegmentCallback(const std::function<void(const std::string& /* filename */, const std::string& /* filePath */)>& callback) override;
     std::string mmss(double secs) override;
     std::string mmssss(double milisecs) override;
 

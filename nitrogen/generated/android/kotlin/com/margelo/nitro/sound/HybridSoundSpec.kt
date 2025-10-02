@@ -144,6 +144,15 @@ abstract class HybridSoundSpec: HybridObject() {
     return __result
   }
   
+  abstract fun setSegmentCallback(callback: (filename: String, filePath: String) -> Unit): Unit
+  
+  @DoNotStrip
+  @Keep
+  private fun setSegmentCallback_cxx(callback: Func_void_std__string_std__string): Unit {
+    val __result = setSegmentCallback(callback)
+    return __result
+  }
+  
   @DoNotStrip
   @Keep
   abstract fun mmss(secs: Double): String

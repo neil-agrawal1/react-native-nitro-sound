@@ -487,6 +487,22 @@ open class HybridSoundSpec_cxx {
   }
   
   @inline(__always)
+  public final func setSegmentCallback(callback: bridge.Func_void_std__string_std__string) -> bridge.Result_void_ {
+    do {
+      try self.__implementation.setSegmentCallback(callback: { () -> (String, String) -> Void in
+        let __wrappedFunction = bridge.wrap_Func_void_std__string_std__string(callback)
+        return { (__filename: String, __filePath: String) -> Void in
+          __wrappedFunction.call(std.string(__filename), std.string(__filePath))
+        }
+      }())
+      return bridge.create_Result_void_()
+    } catch (let __error) {
+      let __exceptionPtr = __error.toCpp()
+      return bridge.create_Result_void_(__exceptionPtr)
+    }
+  }
+  
+  @inline(__always)
   public final func mmss(secs: Double) -> bridge.Result_std__string_ {
     do {
       let __result = try self.__implementation.mmss(secs: secs)

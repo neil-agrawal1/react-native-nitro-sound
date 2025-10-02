@@ -221,6 +221,12 @@ namespace margelo::nitro::sound {
         std::rethrow_exception(__result.error());
       }
     }
+    inline void setSegmentCallback(const std::function<void(const std::string& /* filename */, const std::string& /* filePath */)>& callback) override {
+      auto __result = _swiftPart.setSegmentCallback(callback);
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+    }
     inline std::string mmss(double secs) override {
       auto __result = _swiftPart.mmss(std::forward<decltype(secs)>(secs));
       if (__result.hasError()) [[unlikely]] {

@@ -35,6 +35,7 @@ namespace margelo::nitro::sound {
       prototype.registerHybridMethod("addPlaybackEndListener", &HybridSoundSpec::addPlaybackEndListener);
       prototype.registerHybridMethod("removePlaybackEndListener", &HybridSoundSpec::removePlaybackEndListener);
       prototype.registerHybridMethod("setLogCallback", &HybridSoundSpec::setLogCallback);
+      prototype.registerHybridMethod("setSegmentCallback", &HybridSoundSpec::setSegmentCallback);
       prototype.registerHybridMethod("mmss", &HybridSoundSpec::mmss);
       prototype.registerHybridMethod("mmssss", &HybridSoundSpec::mmssss);
     });

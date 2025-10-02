@@ -30,6 +30,7 @@ namespace margelo::nitro::sound { struct PlaybackEndType; }
 #include "JFunc_void_PlaybackEndType.hpp"
 #include "JPlaybackEndType.hpp"
 #include "JFunc_void_std__string.hpp"
+#include "JFunc_void_std__string_std__string.hpp"
 
 namespace margelo::nitro::sound {
 
@@ -300,6 +301,10 @@ namespace margelo::nitro::sound {
   void JHybridSoundSpec::setLogCallback(const std::function<void(const std::string& /* message */)>& callback) {
     static const auto method = javaClassStatic()->getMethod<void(jni::alias_ref<JFunc_void_std__string::javaobject> /* callback */)>("setLogCallback_cxx");
     method(_javaPart, JFunc_void_std__string_cxx::fromCpp(callback));
+  }
+  void JHybridSoundSpec::setSegmentCallback(const std::function<void(const std::string& /* filename */, const std::string& /* filePath */)>& callback) {
+    static const auto method = javaClassStatic()->getMethod<void(jni::alias_ref<JFunc_void_std__string_std__string::javaobject> /* callback */)>("setSegmentCallback_cxx");
+    method(_javaPart, JFunc_void_std__string_std__string_cxx::fromCpp(callback));
   }
   std::string JHybridSoundSpec::mmss(double secs) {
     static const auto method = javaClassStatic()->getMethod<jni::local_ref<jni::JString>(double /* secs */)>("mmss");
