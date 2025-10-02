@@ -797,8 +797,14 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                 if uri.hasPrefix("http") {
                     // Handle RN dev/bundled assets (http://localhost:8081/…)
                     let data = try Data(contentsOf: URL(string: uri)!)
+
+                    // Extract file extension from original URL (before query string)
+                    let originalURL = URL(string: uri)!
+                    let pathWithoutQuery = originalURL.path  // Gets path before ? query params
+                    let fileExtension = (pathWithoutQuery as NSString).pathExtension.isEmpty ? "m4a" : (pathWithoutQuery as NSString).pathExtension
+
                     let tempURL = FileManager.default.temporaryDirectory
-                        .appendingPathComponent("crossfade_temp_\(UUID().uuidString).m4a")
+                        .appendingPathComponent("crossfade_temp_\(UUID().uuidString).\(fileExtension)")
                     try data.write(to: tempURL)
                     url = tempURL
                 } else if uri.hasPrefix("file://") {
@@ -817,6 +823,9 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                 // Prepare new node
                 newNode.stop()
                 newNode.volume = 0.0
+
+                // Store audio file reference early to ensure it's retained for looping
+                self.currentAudioFile = audioFile
 
                 // Schedule file(s) for playback
                 if self.shouldLoopPlayback {
@@ -844,7 +853,6 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                     // Swap after fade
                     self.currentPlayerNode?.stop()
                     self.currentPlayerNode = newNode
-                    self.currentAudioFile = audioFile
                     self.activePlayer = (newNode == self.audioPlayerNodeA) ? .playerA : .playerB
                 }
 
