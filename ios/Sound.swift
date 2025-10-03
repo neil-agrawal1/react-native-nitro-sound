@@ -73,6 +73,69 @@ import SoundAnalysis
 
     // MARK: - Unified Audio Engine Management
 
+    override init() {
+        super.init()
+        setupAudioInterruptionHandling()
+    }
+
+    private func setupAudioInterruptionHandling() {
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleAudioInterruption),
+            name: AVAudioSession.interruptionNotification,
+            object: AVAudioSession.sharedInstance()
+        )
+    }
+
+    @objc private func handleAudioInterruption(notification: Notification) {
+        guard let userInfo = notification.userInfo,
+              let typeValue = userInfo[AVAudioSessionInterruptionTypeKey] as? UInt,
+              let type = AVAudioSession.InterruptionType(rawValue: typeValue) else {
+            return
+        }
+
+        bridgedLog("🔔 Audio interruption: \(type == .began ? "began" : "ended")")
+
+        if type == .ended {
+            // Restart engine after interruption
+            if audioEngineInitialized {
+                do {
+                    try restartAudioEngine()
+                    bridgedLog("✅ Engine restarted after interruption")
+                } catch {
+                    bridgedLog("❌ Failed to restart engine: \(error.localizedDescription)")
+                }
+            }
+        }
+    }
+
+    private func restartAudioEngine() throws {
+        guard let engine = audioEngine else {
+            throw RuntimeError.error(withMessage: "No engine to restart")
+        }
+
+        // Reactivate session
+        let audioSession = AVAudioSession.sharedInstance()
+        try audioSession.setActive(true)
+
+        // Restart engine if stopped
+        if !engine.isRunning {
+            try engine.start()
+            bridgedLog("✅ Audio engine restarted")
+        }
+    }
+
+    private func ensureEngineRunning() throws {
+        guard let engine = audioEngine else {
+            throw RuntimeError.error(withMessage: "Audio engine not initialized")
+        }
+
+        if !engine.isRunning {
+            bridgedLog("⚠️ Engine stopped unexpectedly, restarting...")
+            try restartAudioEngine()
+        }
+    }
+
     private func initializeAudioEngine() throws {
         guard !audioEngineInitialized else { return }
 
@@ -467,6 +530,9 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                 // Initialize unified audio engine (will only initialize once)
                 try self.initializeAudioEngine()
 
+                // Ensure engine is running
+                try self.ensureEngineRunning()
+
                 guard let uri = uri, !uri.isEmpty else {
                     promise.reject(withError: RuntimeError.error(withMessage: "URI is required for playback"))
                     return
@@ -587,6 +653,21 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
         let status = enabled ? "enabled" : "disabled"
 
         promise.resolve(withResult: "Loop \(status)")
+        return promise
+    }
+
+    public func restartEngine() throws -> Promise<Void> {
+        let promise = Promise<Void>()
+
+        do {
+            try restartAudioEngine()
+            bridgedLog("✅ Engine manually restarted")
+            promise.resolve(withResult: ())
+        } catch {
+            bridgedLog("❌ Failed to restart engine: \(error.localizedDescription)")
+            promise.reject(withError: RuntimeError.error(withMessage: "Failed to restart engine: \(error.localizedDescription)"))
+        }
+
         return promise
     }
 

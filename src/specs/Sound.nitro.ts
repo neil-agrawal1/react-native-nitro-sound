@@ -87,6 +87,9 @@ export interface Sound
   // Loop control methods
   setLoopEnabled(enabled: boolean): Promise<string>;
 
+  // Engine management
+  restartEngine(): Promise<void>;
+
   // Crossfade methods
   crossfadeTo(uri: string, duration?: number): Promise<string>;
 
