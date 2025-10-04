@@ -23,6 +23,14 @@ import SoundAnalysis
     }
     private var activePlayer: ActivePlayer = .none
 
+    // Segment recording modes
+    private enum SegmentMode {
+        case idle       // No recording
+        case autoVAD    // Automatic threshold detection (sleep talking)
+        case manual     // Manual recording (alarm/day residue)
+    }
+    private var currentMode: SegmentMode = .idle
+
     // Crossfade state management
     private var crossfadeTimer: Timer?
     private var isCrossfading: Bool = false
@@ -56,6 +64,7 @@ import SoundAnalysis
 
     // File writing
     private var currentSegmentFile: AVAudioFile?
+    private var currentSegmentIsManual: Bool = false
     private var segmentCounter = 0
     private var silenceCounter = 0
     private let silenceThreshold = 25  // ~0.5 second of silence before ending segment
@@ -69,7 +78,7 @@ import SoundAnalysis
     private var logCallback: ((String) -> Void)?
 
     // Segment callback to notify JavaScript when a new file is written
-    private var segmentCallback: ((String, String) -> Void)?
+    private var segmentCallback: ((String, String, Bool) -> Void)?
 
     // MARK: - Unified Audio Engine Management
 
@@ -94,14 +103,11 @@ import SoundAnalysis
             return
         }
 
-        bridgedLog("🔔 Audio interruption: \(type == .began ? "began" : "ended")")
-
         if type == .ended {
             // Restart engine after interruption
             if audioEngineInitialized {
                 do {
                     try restartAudioEngine()
-                    bridgedLog("✅ Engine restarted after interruption")
                 } catch {
                     bridgedLog("❌ Failed to restart engine: \(error.localizedDescription)")
                 }
@@ -121,7 +127,6 @@ import SoundAnalysis
         // Restart engine if stopped
         if !engine.isRunning {
             try engine.start()
-            bridgedLog("✅ Audio engine restarted")
         }
     }
 
@@ -131,7 +136,6 @@ import SoundAnalysis
         }
 
         if !engine.isRunning {
-            bridgedLog("⚠️ Engine stopped unexpectedly, restarting...")
             try restartAudioEngine()
         }
     }
@@ -176,12 +180,10 @@ import SoundAnalysis
 
         // Force input node initialization by accessing it (required for .playAndRecord)
         let _ = engine.inputNode
-        bridgedLog("🎙️ Input node accessed to ensure proper .playAndRecord configuration")
 
         // Now safe to start engine with both input and output configured
         try engine.start()
         audioEngineInitialized = true
-        bridgedLog("✅ Audio engine initialized and started with .playAndRecord")
     }
 
 
@@ -201,8 +203,6 @@ import SoundAnalysis
     }
 
     private func handlePlaybackCompletion() {
-        // Handle one-shot playback completion
-
         if let audioFile = self.currentAudioFile {
             let durationSeconds = Double(audioFile.length) / audioFile.fileFormat.sampleRate
             let durationMs = durationSeconds * 1000
@@ -211,12 +211,10 @@ import SoundAnalysis
 
         self.stopPlayTimer()
         self.currentPlayerNode = nil
-        self.bridgedLog("🎵 Playback completed (non-looping)")
     }
 
     private func scheduleMoreLoops(audioFile: AVAudioFile, playerNode: AVAudioPlayerNode) {
         guard self.shouldLoopPlayback else {
-            self.bridgedLog("🔄 Loop scheduling cancelled (looping disabled)")
             return
         }
 
@@ -227,7 +225,6 @@ import SoundAnalysis
             // Recursive scheduling for continuous looping
             self?.scheduleMoreLoops(audioFile: audioFile, playerNode: playerNode)
         }
-        self.bridgedLog("🔄 Scheduled 3 more loop iterations")
     }
 
 
@@ -250,14 +247,8 @@ import SoundAnalysis
                 // Request microphone permission
                 let audioSession = AVAudioSession.sharedInstance()
 
-                // Check current permission status first
-                let currentStatus = audioSession.recordPermission
-                self.bridgedLog("🎤 Current microphone permission: \(currentStatus.rawValue)")
-
                 audioSession.requestRecordPermission { [weak self] allowed in
                     guard let self = self else { return }
-
-                    self.bridgedLog("🎤 Microphone permission result: \(allowed)")
 
                     if allowed {
                         DispatchQueue.global(qos: .userInitiated).async {
@@ -296,7 +287,6 @@ import SoundAnalysis
         // Replace your existing startNewSegment() with this version:
 private func startNewSegment(with tapFormat: AVAudioFormat) {
     guard let outputDir = outputDirectory else {
-        bridgedLog("🎙️ ❌ No output directory set for speech segments")
         return
     }
 
@@ -305,13 +295,10 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
     let fileURL = outputDir.appendingPathComponent(filename)
 
     do {
-        // Always use the tap format (guaranteed valid from setupBufferRecording)
         currentSegmentFile = try AVAudioFile(
             forWriting: fileURL,
             settings: tapFormat.settings
         )
-
-        bridgedLog("🎙️ ✅ Started speech segment: \(filename) [SR: \(tapFormat.sampleRate), CH: \(tapFormat.channelCount)]")
 
         // Pre-roll: flush ~3s of buffered audio into the new file
         if let rollingBuffer = rollingBuffer {
@@ -319,15 +306,13 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
             for buffer in preRollBuffers {
                 try currentSegmentFile?.write(from: buffer)
             }
-            bridgedLog("🎙️ ✅ Wrote \(preRollBuffers.count) pre-roll buffers into new segment")
             rollingBuffer.clear()
-            bridgedLog("🔄 Cleared rolling buffer after pre-roll")
         }
 
         silenceCounter = 0
 
     } catch {
-        bridgedLog("🎙️ ❌ Failed to create speech segment file: \(error.localizedDescription)")
+        bridgedLog("❌ Failed to create speech segment: \(error.localizedDescription)")
         currentSegmentFile = nil
     }
 }
@@ -339,54 +324,39 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
 
         // Get file info before closing
         let filename = segmentFile.url.lastPathComponent
-        let filePath = segmentFile.url.path
-        let frameCount = segmentFile.length
-        let sampleRate = segmentFile.fileFormat.sampleRate
-        let duration = Double(frameCount) / sampleRate
+
+        // Get relative path from Documents directory for cross-device compatibility
+        let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].path
+        let absolutePath = segmentFile.url.path
+        let filePath = absolutePath.replacingOccurrences(of: documentsPath + "/", with: "")
 
         // Close the file
         currentSegmentFile = nil
 
-        self.bridgedLog("🎙️ ✅ Ended speech segment: \(filename) (\(String(format: "%.1f", duration))s)")
-
         // Notify JavaScript via callback
         if let callback = self.segmentCallback {
-            callback(filename, filePath)
-            self.bridgedLog("📡 Notified JS of new segment: \(filename)")
+            callback(filename, filePath, self.currentSegmentIsManual)
         }
 
         silenceCounter = 0
     }
 
     private func setupRecording(promise: Promise<Void>) {
-        bridgedLog("🚀 setupRecording called - Starting audio level detection setup")
-
         do {
             guard let engine = self.audioEngine else {
                 promise.reject(withError: RuntimeError.error(withMessage: "Unified audio engine not initialized"))
                 return
             }
 
-            // Log session state
-            let audioSession = AVAudioSession.sharedInstance()
-            bridgedLog("📱 Audio session already configured in initializeAudioEngine()")
-            bridgedLog("🔧 Audio session category: \(audioSession.category.rawValue)")
-            bridgedLog("🔧 Audio session mode: \(audioSession.mode.rawValue)")
-            bridgedLog("🔧 Audio session active: \(audioSession.isOtherAudioPlaying ? "OTHER AUDIO PLAYING" : "CLEAR")")
-
             // Engine should already be running from initialization
             if !engine.isRunning {
-                bridgedLog("❌ Engine is not running - this is unexpected")
                 throw RuntimeError.error(withMessage: "Audio engine is not running")
             }
-            bridgedLog("✅ Engine is running and ready for buffer recording")
 
             let inputNode = engine.inputNode
-            bridgedLog("🎙️ Input node obtained")
 
             // Query *real* hardware format after engine has started
             let hwFormat = inputNode.inputFormat(forBus: 0)
-            bridgedLog("🎙️ HW input format - SR: \(hwFormat.sampleRate), CH: \(hwFormat.channelCount)")
 
             // Define explicit tap format (force mono 44.1k if hwFormat invalid)
             let tapFormat = AVAudioFormat(
@@ -396,10 +366,7 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                 interleaved: false
             )!
 
-            bridgedLog("🎙️ Using tap format - SR: \(tapFormat.sampleRate), CH: \(tapFormat.channelCount)")
-
             // Remove any existing taps
-            bridgedLog("🧹 Removing any existing taps on input node")
             inputNode.removeTap(onBus: 0)
 
             // Init rolling buffer for pre-roll
@@ -415,17 +382,10 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
             }
 
             // Install tap
-            bridgedLog("📍 Installing tap with explicit format...")
             inputNode.installTap(onBus: 0, bufferSize: 1024, format: tapFormat) { [weak self] buffer, time in
                 guard let self = self else { return }
 
-                // Debug log frames
                 self.tapFrameCounter += 1
-                if self.tapFrameCounter <= 10 {
-                    self.bridgedLog("📡 Tap frame #\(self.tapFrameCounter) - buffer size: \(buffer.frameLength), time: \(time.sampleTime)")
-                } else if self.tapFrameCounter % 100 == 0 {
-                    self.bridgedLog("📡 Tap frame #\(self.tapFrameCounter) - buffer size: \(buffer.frameLength)")
-                }
 
                 // Audio level detection
                 let audioIsLoud = self.isAudioLoudEnough(buffer)
@@ -433,20 +393,21 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                 // Pre-roll
                 self.rollingBuffer?.write(buffer)
 
-                // Segment handling
-                let isCurrentlyRecordingSegment = self.currentSegmentFile != nil
-                if audioIsLoud {
-                    if !isCurrentlyRecordingSegment {
-                        self.bridgedLog("🎙️ Audio detected - starting new segment")
-                        self.startNewSegment(with: tapFormat)
-                    }
-                    self.silenceFrameCount = 0
-                } else if isCurrentlyRecordingSegment {
-                    self.silenceFrameCount += 1
-                    if self.silenceFrameCount >= 50 {
-                        self.bridgedLog("🎙️ Silence detected - ending segment")
-                        self.endCurrentSegment()
+                // Segment handling - only run automatic detection if in autoVAD mode
+                if self.currentMode == .autoVAD {
+                    let isCurrentlyRecordingSegment = self.currentSegmentFile != nil
+                    if audioIsLoud {
+                        if !isCurrentlyRecordingSegment {
+                            self.currentSegmentIsManual = false
+                            self.startNewSegment(with: tapFormat)
+                        }
                         self.silenceFrameCount = 0
+                    } else if isCurrentlyRecordingSegment {
+                        self.silenceFrameCount += 1
+                        if self.silenceFrameCount >= 50 {
+                            self.endCurrentSegment()
+                            self.silenceFrameCount = 0
+                        }
                     }
                 }
 
@@ -455,16 +416,19 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                     do {
                         try segmentFile.write(from: buffer)
                     } catch {
-                        self.bridgedLog("🎙️ ❌ Failed to write buffer: \(error.localizedDescription)")
+                        self.bridgedLog("❌ Failed to write buffer: \(error.localizedDescription)")
                     }
                 }
             }
 
-            bridgedLog("✅ Tap installed successfully! Threshold: \(self.audioLevelThreshold) dB")
+            // Set mode to autoVAD when recording starts
+            self.currentMode = .autoVAD
+            self.bridgedLog("🔄 Recording mode: autoVAD (automatic detection)")
+
             promise.resolve(withResult: ())
 
         } catch {
-            bridgedLog("🎙️ ❌ Recording setup failed: \(error.localizedDescription)")
+            bridgedLog("❌ Recording setup failed: \(error.localizedDescription)")
             promise.reject(withError: RuntimeError.error(withMessage: "Recording setup failed: \(error.localizedDescription)"))
         }
     }
@@ -502,10 +466,77 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                 engine.inputNode.removeTap(onBus: 0)
             }
 
+            // Reset mode to idle
+            self.currentMode = .idle
+
             // No callback to clear - using event emitting
 
             // Keep the unified engine running for potential playback or quick restart
-            print("🎙️ Recording stopped successfully (unified engine remains active)")
+            promise.resolve(withResult: ())
+        }
+
+        return promise
+    }
+
+    // MARK: - Manual Segment Control
+
+    public func startManualSegment() throws -> Promise<Void> {
+        let promise = Promise<Void>()
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else {
+                promise.reject(withError: RuntimeError.error(withMessage: "Self is nil"))
+                return
+            }
+
+            // Switch to manual mode (suppresses auto detection)
+            self.currentMode = .manual
+            self.currentSegmentIsManual = true
+            self.silenceFrameCount = 0
+
+            // Force close any existing segment (might be from auto detection)
+            if self.currentSegmentFile != nil {
+                self.bridgedLog("⚠️ Closing existing auto segment before manual recording")
+                self.endCurrentSegment()
+            }
+
+            // Always start a fresh segment for manual recording
+            guard let engine = self.audioEngine else {
+                promise.reject(withError: RuntimeError.error(withMessage: "Audio engine not initialized"))
+                return
+            }
+
+            let tapFormat = engine.inputNode.inputFormat(forBus: 0)
+            self.startNewSegment(with: tapFormat)
+            self.bridgedLog("🗣️ Manual segment started (alarm/day residue)")
+
+            promise.resolve(withResult: ())
+        }
+
+        return promise
+    }
+
+    public func stopManualSegment() throws -> Promise<Void> {
+        let promise = Promise<Void>()
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else {
+                promise.reject(withError: RuntimeError.error(withMessage: "Self is nil"))
+                return
+            }
+
+            // End current segment if in manual mode
+            if self.currentMode == .manual {
+                if self.currentSegmentFile != nil {
+                    self.endCurrentSegment()
+                }
+
+                // Return to autoVAD for automatic detection
+                // (If session ending, stopRecorder() will override to idle)
+                self.currentMode = .autoVAD
+                self.bridgedLog("✅ Manual segment ended, returning to autoVAD mode")
+            }
+
             promise.resolve(withResult: ())
         }
 
@@ -525,8 +556,6 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
             }
 
             do {
-                self.bridgedLog("🎵 Starting player for URI: \(uri ?? "nil")")
-
                 // Initialize unified audio engine (will only initialize once)
                 try self.initializeAudioEngine()
 
@@ -538,44 +567,27 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                     return
                 }
 
-                print("🎵 URI provided: \(uri)")
-
                 // Store URI for potential looping
                 self.currentPlaybackURI = uri
-                if self.shouldLoopPlayback {
-                    print("🔄 Looping enabled for playback")
-                }
 
                 // Handle all URLs the same way with AVAudioFile
                 let url: URL
                 if uri.hasPrefix("http") {
-                    // For now, handle HTTP URLs as before
-                    // TODO: Implement proper streaming with AVAudioPlayerNode
-                    print("🎵 Detected remote URL, will load file data")
                     url = URL(string: uri)!
                 } else if uri.hasPrefix("file://") {
-                    print("🎵 URI has file:// prefix")
                     url = URL(string: uri)!
-                    print("🎵 Created URL from string: \(url)")
                 } else {
-                    print("🎵 URI is plain path")
                     url = URL(fileURLWithPath: uri)
-                    print("🎵 Created URL from file path: \(url)")
                 }
 
                 // For local files, check if file exists
                 if !uri.hasPrefix("http") {
-                    print("🎵 Final URL path: \(url.path)")
-                    print("🎵 Checking if file exists at path: \(url.path)")
-
                     if !FileManager.default.fileExists(atPath: url.path) {
-                        self.bridgedLog("🎵 ❌ File does not exist at path: \(url.path)")
+                        self.bridgedLog("❌ File does not exist at path: \(url.path)")
                         promise.reject(withError: RuntimeError.error(withMessage: "Audio file does not exist at path: \(uri)"))
                         return
                     }
                 }
-
-                print("🎵 ✅ Loading audio file with AVAudioFile...")
 
                 // Load the audio file
                 let audioFile: AVAudioFile
@@ -616,7 +628,6 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                         // When 3rd iteration completes, schedule 3 more
                         self?.scheduleMoreLoops(audioFile: audioFile, playerNode: playerNode)
                     }
-                    self.bridgedLog("🔄 File scheduled for seamless looping (3 iterations pre-scheduled)")
                 } else {
                     // Non-looping: schedule file with completion
                     playerNode.scheduleFile(audioFile, at: nil) { [weak self] in
@@ -631,13 +642,12 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                     self.didEmitPlaybackEnd = false
                     self.startPlayTimer()
                     playerNode.play()
-                    self.bridgedLog("🎵 Playback started (file-based)")
 
                     promise.resolve(withResult: uri)
                 }
 
             } catch {
-                self.bridgedLog("🎵 ❌ Playback error: \(error.localizedDescription)")
+                self.bridgedLog("❌ Playback error: \(error.localizedDescription)")
                 promise.reject(withError: RuntimeError.error(withMessage: "Playback error: \(error.localizedDescription)"))
             }
         }
@@ -661,7 +671,6 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
 
         do {
             try restartAudioEngine()
-            bridgedLog("✅ Engine manually restarted")
             promise.resolve(withResult: ())
         } catch {
             bridgedLog("❌ Failed to restart engine: \(error.localizedDescription)")
@@ -799,7 +808,6 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
     }
 
     public func removePlayBackListener() throws {
-        print("🎵 Removing playback listener and stopping timer")
         self.playBackListener = nil
         self.stopPlayTimer()
     }
@@ -818,9 +826,8 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
         self.logCallback = callback
     }
 
-    public func setSegmentCallback(callback: @escaping (String, String) -> Void) throws {
+    public func setSegmentCallback(callback: @escaping (String, String, Bool) -> Void) throws {
         self.segmentCallback = callback
-        bridgedLog("✅ Segment callback registered")
     }
 
     private func bridgedLog(_ message: String) {
@@ -930,7 +937,6 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                         // When 3rd iteration completes, schedule 3 more
                         self?.scheduleMoreLoops(audioFile: audioFile, playerNode: newNode)
                     }
-                    self.bridgedLog("🔄 Crossfade target scheduled for looping")
                 } else {
                     newNode.scheduleFile(audioFile, at: nil) { [weak self] in
                         self?.handlePlaybackCompletion()
@@ -945,14 +951,12 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                         // Stop old node when fade out completes
                         currentNode.stop()
                         currentNode.volume = 0.0  // Ensure volume stays at 0
-                        self.bridgedLog("🔇 Old node stopped after fade out")
                     }
                 }
                 self.fadeVolume(node: newNode, from: 0.0, to: 1.0, duration: fadeDuration) {
                     // Swap references after new node fades in
                     self.currentPlayerNode = newNode
                     self.activePlayer = (newNode == self.audioPlayerNodeA) ? .playerA : .playerB
-                    self.bridgedLog("🔀 Crossfade complete, new node active")
                 }
 
                 // Resolve immediately (crossfade started)
@@ -1100,7 +1104,6 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
 
     private func emitPlaybackEndEvents(durationMs: Double, includePlaybackUpdate: Bool) {
         guard !self.didEmitPlaybackEnd else {
-            print("🎵 Playback end already emitted, skipping duplicate")
             return
         }
         self.didEmitPlaybackEnd = true
@@ -1111,7 +1114,6 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                 duration: durationMs,
                 currentPosition: durationMs
             )
-            print("🎵 Emitting final playback update at \(durationMs)ms")
             listener(finalPlayBack)
         }
 
@@ -1120,7 +1122,6 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                 duration: durationMs,
                 currentPosition: durationMs
             )
-            print("🎵 Emitting playback end event at \(durationMs)ms")
             endListener(endEvent)
         }
     }
@@ -1143,7 +1144,6 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
         init(owner: HybridSound) { self.owner = owner }
 
         func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
-            print("🎵 AVAudioPlayer finished playing. success=\(flag)")
             guard let owner = owner else { return }
             let finalDurationMs = player.duration * 1000
             owner.emitPlaybackEndEvents(durationMs: finalDurationMs, includePlaybackUpdate: true)
@@ -1151,7 +1151,7 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
         }
 
         func audioPlayerDecodeErrorDidOccur(_ player: AVAudioPlayer, error: Error?) {
-            print("🎵 AVAudioPlayer decode error: \(String(describing: error))")
+            NSLog("AVAudioPlayer decode error: \(String(describing: error))")
         }
     }
 
@@ -1182,7 +1182,6 @@ private class RollingAudioBuffer {
 
             if writeIndex == 0 && !isFull {
                 isFull = true
-                print("🔄 Rolling buffer is now full (0.6 seconds of pre-roll ready)")
             }
         }
     }
@@ -1269,21 +1268,7 @@ extension HybridSound {
         let rms = sqrt(sum / Float(frameLength))
         let db = 20 * log10(max(rms, 0.000001))
 
-        let isLoud = db > audioLevelThreshold
-
-        // Log ALL audio levels periodically (every 44th frame ≈ 1 second at 44100Hz)
-        if tapFrameCounter % 44 == 0 {
-            let status = isLoud ? "🔊 LOUD" : "🔇 quiet"
-            self.bridgedLog("📊 Audio Level: \(String(format: "%.2f", db)) dB (threshold: \(String(format: "%.1f", audioLevelThreshold)) dB) - \(status)")
-        }
-
-        // Log when threshold is crossed
-        if isLoud {
-            self.bridgedLog("🔊 AUDIO DETECTED! Level: \(String(format: "%.2f", db)) dB > threshold: \(String(format: "%.1f", audioLevelThreshold)) dB")
-        }
-
-        // Sound detected if above threshold
-        return isLoud
+        return db > audioLevelThreshold
     }
 
     // SNResultsObserving stub methods (keeping for protocol conformance if needed)
@@ -1292,10 +1277,10 @@ extension HybridSound {
     }
 
     func request(_ request: SNRequest, didFailWithError error: Error) {
-        print("🎙️ Speech detection error (ignored): \(error)")
+        // No longer used
     }
 
     func requestDidComplete(_ request: SNRequest) {
-        print("🎙️ Speech detection request completed (ignored)")
+        // No longer used
     }
 }

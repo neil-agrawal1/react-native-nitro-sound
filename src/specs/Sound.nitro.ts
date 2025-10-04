@@ -68,6 +68,10 @@ export interface Sound
   startRecorder(): Promise<void>;
   stopRecorder(): Promise<void>;
 
+  // Segment mode control (for alarm-based manual recording)
+  startManualSegment(): Promise<void>;
+  stopManualSegment(): Promise<void>;
+
   // Legacy methods (stubs for backwards compatibility)
   pauseRecorder(): Promise<string>;
   resumeRecorder(): Promise<string>;
@@ -112,7 +116,7 @@ export interface Sound
   setLogCallback(callback: (message: string) => void): void;
 
   // Speech segment callback (called when a new segment file is written)
-  setSegmentCallback(callback: (filename: string, filePath: string) => void): void;
+  setSegmentCallback(callback: (filename: string, filePath: string, isManual: boolean) => void): void;
 
   // Utility methods
   mmss(secs: number): string;
