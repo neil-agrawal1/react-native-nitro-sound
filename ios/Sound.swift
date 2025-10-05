@@ -287,6 +287,7 @@ import SoundAnalysis
         // Replace your existing startNewSegment() with this version:
 private func startNewSegment(with tapFormat: AVAudioFormat) {
     guard let outputDir = outputDirectory else {
+        bridgedLog("⚠️ Cannot start segment: output directory not set")
         return
     }
 
@@ -299,6 +300,11 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
             forWriting: fileURL,
             settings: tapFormat.settings
         )
+
+        let isManual = currentSegmentIsManual
+        let modeType = isManual ? "MANUAL" : "AUTO"
+        bridgedLog("🎙️ Started \(modeType) segment: \(filename) in mode: \(currentMode)")
+        bridgedLog("📂 File path: \(fileURL.path)")
 
         // Pre-roll: flush ~3s of buffered audio into the new file
         if let rollingBuffer = rollingBuffer {
@@ -330,12 +336,20 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
         let absolutePath = segmentFile.url.path
         let filePath = absolutePath.replacingOccurrences(of: documentsPath + "/", with: "")
 
+        let isManual = self.currentSegmentIsManual
+        let modeType = isManual ? "MANUAL" : "AUTO"
+        bridgedLog("🛑 Ended \(modeType) segment: \(filename)")
+        bridgedLog("📤 Calling callback with relativePath: \(filePath), isManual: \(isManual)")
+
         // Close the file
         currentSegmentFile = nil
 
         // Notify JavaScript via callback
         if let callback = self.segmentCallback {
             callback(filename, filePath, self.currentSegmentIsManual)
+            bridgedLog("✅ Callback fired for \(filename)")
+        } else {
+            bridgedLog("⚠️ No callback set for segment")
         }
 
         silenceCounter = 0
@@ -398,6 +412,7 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                     let isCurrentlyRecordingSegment = self.currentSegmentFile != nil
                     if audioIsLoud {
                         if !isCurrentlyRecordingSegment {
+                            self.bridgedLog("🔊 Speech detected! Starting AUTO segment (mode: \(self.currentMode))")
                             self.currentSegmentIsManual = false
                             self.startNewSegment(with: tapFormat)
                         }
@@ -405,9 +420,15 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                     } else if isCurrentlyRecordingSegment {
                         self.silenceFrameCount += 1
                         if self.silenceFrameCount >= 50 {
+                            self.bridgedLog("🤫 Silence detected, ending AUTO segment after 50 frames")
                             self.endCurrentSegment()
                             self.silenceFrameCount = 0
                         }
+                    }
+                } else if self.currentMode == .manual {
+                    // In manual mode, just record everything (no VAD)
+                    if self.tapFrameCounter % 2000 == 0 {  // Log every ~20 seconds
+                        self.bridgedLog("🎙️ MANUAL recording active (frame: \(self.tapFrameCounter))")
                     }
                 }
 
@@ -467,6 +488,7 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
             }
 
             // Reset mode to idle
+            self.bridgedLog("🔄 Mode change: \(self.currentMode) → idle (stopRecorder)")
             self.currentMode = .idle
 
             // No callback to clear - using event emitting
@@ -490,6 +512,7 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
             }
 
             // Switch to manual mode (suppresses auto detection)
+            self.bridgedLog("🔄 Mode change: \(self.currentMode) → manual")
             self.currentMode = .manual
             self.currentSegmentIsManual = true
             self.silenceFrameCount = 0
@@ -533,6 +556,7 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
 
                 // Return to autoVAD for automatic detection
                 // (If session ending, stopRecorder() will override to idle)
+                self.bridgedLog("🔄 Mode change: manual → autoVAD")
                 self.currentMode = .autoVAD
                 self.bridgedLog("✅ Manual segment ended, returning to autoVAD mode")
             }
