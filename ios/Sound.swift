@@ -17,6 +17,11 @@ import SoundAnalysis
     private var currentPlayerNode: AVAudioPlayerNode?
     private var currentAudioFile: AVAudioFile?
 
+    // Ambient loop player (independent layer)
+    private var audioPlayerNodeC: AVAudioPlayerNode?
+    private var isAmbientLoopPlaying: Bool = false
+    private var currentAmbientFile: AVAudioFile?
+
     // Track which player is active (for future crossfading)
     private enum ActivePlayer {
         case playerA, playerB, none
@@ -120,9 +125,7 @@ import SoundAnalysis
             throw RuntimeError.error(withMessage: "No engine to restart")
         }
 
-        // Reactivate session
-        let audioSession = AVAudioSession.sharedInstance()
-        try audioSession.setActive(true)
+        // Session is already active from initializeAudioEngine(), no need to reactivate
 
         // Restart engine if stopped
         if !engine.isRunning {
@@ -162,21 +165,25 @@ import SoundAnalysis
         // Create player nodes for crossfading support
         audioPlayerNodeA = AVAudioPlayerNode()
         audioPlayerNodeB = AVAudioPlayerNode()
+        audioPlayerNodeC = AVAudioPlayerNode()
 
         // Attach nodes to engine
         guard let engine = audioEngine,
             let playerA = audioPlayerNodeA,
-            let playerB = audioPlayerNodeB else {
+            let playerB = audioPlayerNodeB,
+            let playerC = audioPlayerNodeC else {
             throw RuntimeError.error(withMessage: "Failed to create audio engine components")
         }
 
         engine.attach(playerA)
         engine.attach(playerB)
+        engine.attach(playerC)
 
         // Connect player nodes to main mixer
         let mainMixer = engine.mainMixerNode
         engine.connect(playerA, to: mainMixer, format: nil)
         engine.connect(playerB, to: mainMixer, format: nil)
+        engine.connect(playerC, to: mainMixer, format: nil)
 
         // Force input node initialization by accessing it (required for .playAndRecord)
         let _ = engine.inputNode
@@ -224,6 +231,20 @@ import SoundAnalysis
         playerNode.scheduleFile(audioFile, at: nil) { [weak self] in
             // Recursive scheduling for continuous looping
             self?.scheduleMoreLoops(audioFile: audioFile, playerNode: playerNode)
+        }
+    }
+
+    private func scheduleMoreAmbientLoops(audioFile: AVAudioFile, playerNode: AVAudioPlayerNode) {
+        guard self.isAmbientLoopPlaying else {
+            return
+        }
+
+        // Schedule 3 more iterations
+        playerNode.scheduleFile(audioFile, at: nil, completionHandler: nil)
+        playerNode.scheduleFile(audioFile, at: nil, completionHandler: nil)
+        playerNode.scheduleFile(audioFile, at: nil) { [weak self] in
+            // Recursive scheduling for continuous looping
+            self?.scheduleMoreAmbientLoops(audioFile: audioFile, playerNode: playerNode)
         }
     }
 
@@ -707,15 +728,26 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
     public func stopPlayer() throws -> Promise<String> {
         let promise = Promise<String>()
 
-        // Stop both player nodes
+        // Stop AND RESET both player nodes
         if let playerA = self.audioPlayerNodeA {
             playerA.stop()
+            playerA.reset()  // Clear all scheduled buffers and reset state
             playerA.volume = 1.0 // Reset volume
         }
 
         if let playerB = self.audioPlayerNodeB {
             playerB.stop()
+            playerB.reset()  // Clear all scheduled buffers and reset state
             playerB.volume = 1.0 // Reset volume
+        }
+
+        // Stop ambient loop if playing
+        if self.isAmbientLoopPlaying, let playerC = self.audioPlayerNodeC {
+            playerC.stop()
+            playerC.reset()
+            playerC.volume = 1.0
+            self.isAmbientLoopPlaying = false
+            self.currentAmbientFile = nil
         }
 
         self.currentPlayerNode = nil
@@ -988,6 +1020,122 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
 
             } catch {
                 promise.reject(withError: RuntimeError.error(withMessage: error.localizedDescription))
+            }
+        }
+
+        return promise
+    }
+
+    // MARK: - Ambient Loop Methods
+    public func startAmbientLoop(uri: String, volume: Double) throws -> Promise<Void> {
+        let promise = Promise<Void>()
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else {
+                promise.reject(withError: RuntimeError.error(withMessage: "Self is nil"))
+                return
+            }
+
+            do {
+                // Initialize audio engine if needed
+                try self.initializeAudioEngine()
+                try self.ensureEngineRunning()
+
+                guard let playerC = self.audioPlayerNodeC else {
+                    promise.reject(withError: RuntimeError.error(withMessage: "Ambient player not initialized"))
+                    return
+                }
+
+                // Load audio file
+                let url: URL
+                if uri.hasPrefix("http") {
+                    let data = try Data(contentsOf: URL(string: uri)!)
+                    let pathWithoutQuery = URL(string: uri)!.path
+                    let fileExtension = (pathWithoutQuery as NSString).pathExtension.isEmpty ? "wav" : (pathWithoutQuery as NSString).pathExtension
+                    let tempURL = FileManager.default.temporaryDirectory
+                        .appendingPathComponent("ambient_\(UUID().uuidString).\(fileExtension)")
+                    try data.write(to: tempURL)
+                    url = tempURL
+                } else if uri.hasPrefix("file://") {
+                    url = URL(string: uri)!
+                } else {
+                    url = URL(fileURLWithPath: uri)
+                }
+
+                let audioFile = try AVAudioFile(forReading: url)
+                self.currentAmbientFile = audioFile
+
+                // Stop if already playing
+                if self.isAmbientLoopPlaying {
+                    playerC.stop()
+                    playerC.reset()
+                }
+
+                // Set volume
+                playerC.volume = Float(volume)
+
+                // Schedule for looping (pre-schedule 3 iterations)
+                playerC.scheduleFile(audioFile, at: nil, completionHandler: nil)
+                playerC.scheduleFile(audioFile, at: nil, completionHandler: nil)
+                playerC.scheduleFile(audioFile, at: nil) { [weak self] in
+                    self?.scheduleMoreAmbientLoops(audioFile: audioFile, playerNode: playerC)
+                }
+
+                // Play
+                playerC.play()
+                self.isAmbientLoopPlaying = true
+
+                self.bridgedLog("🎵 Ambient loop started at \(Int(volume * 100))% volume")
+                promise.resolve(withResult: ())
+
+            } catch {
+                self.bridgedLog("❌ Failed to start ambient loop: \(error.localizedDescription)")
+                promise.reject(withError: RuntimeError.error(withMessage: error.localizedDescription))
+            }
+        }
+
+        return promise
+    }
+
+    public func stopAmbientLoop(fadeDuration: Double?) throws -> Promise<Void> {
+        let promise = Promise<Void>()
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else {
+                promise.reject(withError: RuntimeError.error(withMessage: "Self is nil"))
+                return
+            }
+
+            guard let playerC = self.audioPlayerNodeC else {
+                promise.resolve(withResult: ())
+                return
+            }
+
+            if !self.isAmbientLoopPlaying {
+                promise.resolve(withResult: ())
+                return
+            }
+
+            let duration = fadeDuration ?? 2.0
+
+            if duration > 0 {
+                // Fade out
+                self.fadeVolume(node: playerC, from: playerC.volume, to: 0.0, duration: duration) {
+                    playerC.stop()
+                    playerC.reset()
+                    self.isAmbientLoopPlaying = false
+                    self.currentAmbientFile = nil
+                    self.bridgedLog("🔇 Ambient loop stopped (faded)")
+                    promise.resolve(withResult: ())
+                }
+            } else {
+                // Immediate stop
+                playerC.stop()
+                playerC.reset()
+                self.isAmbientLoopPlaying = false
+                self.currentAmbientFile = nil
+                self.bridgedLog("🔇 Ambient loop stopped (immediate)")
+                promise.resolve(withResult: ())
             }
         }
 

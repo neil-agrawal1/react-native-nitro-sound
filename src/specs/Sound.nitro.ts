@@ -97,6 +97,10 @@ export interface Sound
   // Crossfade methods
   crossfadeTo(uri: string, duration?: number): Promise<string>;
 
+  // Ambient loop methods
+  startAmbientLoop(uri: string, volume: number): Promise<void>;
+  stopAmbientLoop(fadeDuration?: number): Promise<void>;
+
   // Subscription
   setSubscriptionDuration(sec: number): void;
 
