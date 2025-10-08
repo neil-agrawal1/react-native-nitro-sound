@@ -71,9 +71,9 @@ import FluidAudio
     private var vadThreshold: Float = 0.6
     private var speechConfidence: Float = 0.0
 
-    // Manual mode silence detection (15 seconds at ~50 fps = 750 frames)
+    // Manual mode silence detection (15 seconds at ~14 fps = 210 frames)
     private var manualSilenceFrameCount: Int = 0
-    private let manualSilenceThreshold: Int = 750  // ~15 seconds of silence
+    private let manualSilenceThreshold: Int = 210  // ~15 seconds of silence at observed 14 fps
 
     // Rolling buffer for 3-second pre-roll (pre-allocated)
     private var rollingBuffer: RollingAudioBuffer?
@@ -555,9 +555,9 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                         // Increment silence counter
                         self.manualSilenceFrameCount += 1
 
-                        // Log progress every 5 seconds (250 frames at ~50fps)
-                        if self.manualSilenceFrameCount % 250 == 0 {
-                            let seconds = self.manualSilenceFrameCount / 50
+                        // Log progress every 5 seconds (70 frames at ~14fps)
+                        if self.manualSilenceFrameCount % 70 == 0 {
+                            let seconds = self.manualSilenceFrameCount / 14
                             self.bridgedLog("🤫 \(seconds) seconds of silence in manual mode...")
                         }
 
