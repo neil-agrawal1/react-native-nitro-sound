@@ -23,6 +23,8 @@
     "nitro.json",
     "*.podspec",
     "react-native.config.js",
+    "tsconfig.build.json",
+    "scripts",
     "!ios/build",
     "!android/build",
     "!android/gradle",
