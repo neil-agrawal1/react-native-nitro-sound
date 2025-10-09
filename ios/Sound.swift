@@ -68,7 +68,7 @@ import FluidAudio
     // VAD properties
     private var vadManager: VadManager?
     private var vadStreamState: VadStreamState?
-    private var vadThreshold: Float = 0.6
+    private var vadThreshold: Float = 0.4  // 40% confidence (lower = more sensitive)
 
     // Audio format conversion (48kHz → 16kHz for VAD)
     private var audioConverter: AVAudioConverter?
