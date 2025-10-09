@@ -69,7 +69,47 @@ import FluidAudio
     private var vadManager: VadManager?
     private var vadStreamState: VadStreamState?
     private var vadThreshold: Float = 0.6
-    private var speechConfidence: Float = 0.0
+
+    // Audio format conversion (48kHz → 16kHz for VAD)
+    private var audioConverter: AVAudioConverter?
+    private var targetFormat: AVAudioFormat?  // 16kHz format for VAD and file writing
+
+    // MARK: - Audio Format Conversion Helper
+
+    /// Converts a buffer from hardware sample rate (e.g., 48kHz) to 16kHz for VAD processing
+    private func convertTo16kHz(_ buffer: AVAudioPCMBuffer) -> AVAudioPCMBuffer? {
+        guard let converter = self.audioConverter,
+              let targetFormat = self.targetFormat else {
+            return nil
+        }
+
+        // Calculate output frame capacity based on sample rate ratio
+        let sampleRateRatio = targetFormat.sampleRate / buffer.format.sampleRate
+        let outputFrameCapacity = AVAudioFrameCount(Double(buffer.frameLength) * sampleRateRatio)
+
+        // Create output buffer at target format (16kHz)
+        guard let outputBuffer = AVAudioPCMBuffer(
+            pcmFormat: targetFormat,
+            frameCapacity: outputFrameCapacity
+        ) else {
+            return nil
+        }
+
+        var error: NSError?
+        let inputBlock: AVAudioConverterInputBlock = { inNumPackets, outStatus in
+            outStatus.pointee = .haveData
+            return buffer
+        }
+
+        converter.convert(to: outputBuffer, error: &error, withInputFrom: inputBlock)
+
+        if let error = error {
+            self.bridgedLog("⚠️ Conversion error: \(error.localizedDescription)")
+            return nil
+        }
+
+        return outputBuffer
+    }
 
     // Manual mode silence detection (15 seconds at ~14 fps = 210 frames)
     private var manualSilenceFrameCount: Int = 0
@@ -431,21 +471,31 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
             let inputNode = engine.inputNode
 
             // Query *real* hardware format after engine has started
-            let hwFormat = inputNode.inputFormat(forBus: 0)
+            let hwFormat = inputNode.outputFormat(forBus: 0)  // Use outputFormat, not inputFormat
 
-            // Define explicit tap format (force 16kHz mono for VAD)
+            // Create target format for VAD (16kHz mono)
             // FluidAudio VAD requires 16kHz sample rate
-            let tapFormat = AVAudioFormat(
+            guard let target16kHzFormat = AVAudioFormat(
                 commonFormat: .pcmFormatFloat32,
                 sampleRate: 16000,  // Fixed at 16kHz for VAD
                 channels: 1,
                 interleaved: false
-            )!
+            ) else {
+                throw RuntimeError.error(withMessage: "Failed to create 16kHz target format")
+            }
 
-            // Log hardware vs tap formats to verify iOS automatic conversion
+            self.targetFormat = target16kHzFormat
+
+            // Create audio converter from hardware rate → 16kHz
+            guard let converter = AVAudioConverter(from: hwFormat, to: target16kHzFormat) else {
+                throw RuntimeError.error(withMessage: "Failed to create audio converter from \(Int(hwFormat.sampleRate))Hz to 16kHz")
+            }
+            self.audioConverter = converter
+
+            // Log hardware and target formats
             self.bridgedLog("🎤 Hardware format: \(Int(hwFormat.sampleRate))Hz, \(hwFormat.channelCount) channels")
-            self.bridgedLog("🎚️ Tap format: \(Int(tapFormat.sampleRate))Hz, \(tapFormat.channelCount) channels")
-            self.bridgedLog("✅ Audio engine will automatically convert \(Int(hwFormat.sampleRate))Hz → \(Int(tapFormat.sampleRate))Hz")
+            self.bridgedLog("🎯 Target format: \(Int(target16kHzFormat.sampleRate))Hz, \(target16kHzFormat.channelCount) channels")
+            self.bridgedLog("✅ Using AVAudioConverter for \(Int(hwFormat.sampleRate))Hz → 16kHz conversion")
 
             // Remove any existing taps
             inputNode.removeTap(onBus: 0)
@@ -453,13 +503,17 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
             // Init rolling buffer for pre-roll
             rollingBuffer = RollingAudioBuffer()
 
+            // Set mode to idle FIRST (before VAD initialization)
+            self.currentMode = .idle
+            self.bridgedLog("🔄 Recording mode: idle (waiting for mode switch)")
+
             // Initialize VAD components asynchronously (non-blocking)
             // Recording starts immediately; VAD becomes active when ready
             Task {
                 do {
-                    let vadConfig = VadConfig(threshold: Double(self.vadThreshold))
+                    let vadConfig = VadConfig(threshold: self.vadThreshold)
                     self.vadManager = try await VadManager(config: vadConfig)
-                    self.vadStreamState = await self.vadManager?.makeStreamState()
+                    self.vadStreamState = VadStreamState.initial()
                     self.bridgedLog("✅ VAD initialized (threshold: \(self.vadThreshold), sample rate: 16kHz)")
                 } catch {
                     self.bridgedLog("⚠️ VAD initialization failed: \(error.localizedDescription)")
@@ -476,51 +530,63 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                 try FileManager.default.createDirectory(at: outputDir, withIntermediateDirectories: true)
             }
 
-            // Install tap
-            inputNode.installTap(onBus: 0, bufferSize: 1024, format: tapFormat) { [weak self] buffer, time in
+            // Install tap using HARDWARE format (not 16kHz)
+            // We'll convert buffers to 16kHz inside the callback
+            inputNode.installTap(onBus: 0, bufferSize: 1024, format: hwFormat) { [weak self] buffer, time in
                 guard let self = self else { return }
 
                 self.tapFrameCounter += 1
 
-                // VAD-based speech detection (replaces RMS)
-                var audioIsLoud = false
-
-                if let vadMgr = self.vadManager,
-                   var vadState = self.vadStreamState {
-                    // Process VAD asynchronously (runs in background)
-                    Task {
-                        do {
-                            // Extract Float array directly from buffer (already 16kHz from tap)
-                            guard let floatChannelData = buffer.floatChannelData else { return }
-                            let frameLength = Int(buffer.frameLength)
-                            let samples = Array(UnsafeBufferPointer(start: floatChannelData[0], count: frameLength))
-
-                            // Process with VAD
-                            let vadResult = try await vadMgr.processStreamingChunk(
-                                samples,
-                                state: vadState,
-                                config: .default
-                            )
-
-                            // Update state and confidence for next chunk
-                            self.vadStreamState = vadResult.state
-                            self.speechConfidence = Float(vadResult.probability)
-
-                        } catch {
-                            // VAD processing error - confidence stays at previous value
-                        }
-                    }
-
-                    // Use most recent VAD result (from previous frame)
-                    audioIsLoud = self.speechConfidence > self.vadThreshold
-
-                } else {
-                    // Fallback to RMS if VAD not initialized
-                    audioIsLoud = self.isAudioLoudEnough(buffer)
+                // Convert buffer from hardware rate (48kHz) to 16kHz for VAD
+                guard let converted16kHzBuffer = self.convertTo16kHz(buffer) else {
+                    self.bridgedLog("⚠️ Failed to convert buffer, skipping frame")
+                    return
                 }
 
-                // Pre-roll
-                self.rollingBuffer?.write(buffer)
+                // VAD-based speech detection - ONLY when needed
+                var audioIsLoud = false
+
+                // Only compute VAD if we're in a mode that needs it
+                if self.currentMode == .autoVAD || self.currentMode == .manual {
+                    if let vadMgr = self.vadManager,
+                       let vadState = self.vadStreamState {
+                        // Process VAD asynchronously (runs in background)
+                        Task {
+                            do {
+                                // Extract Float array from CONVERTED 16kHz buffer
+                                guard let floatChannelData = converted16kHzBuffer.floatChannelData else { return }
+                                let frameLength = Int(converted16kHzBuffer.frameLength)
+                                let samples = Array(UnsafeBufferPointer(start: floatChannelData[0], count: frameLength))
+
+                                // Use public streaming API
+                                let streamResult = try await vadMgr.processStreamingChunk(
+                                    samples,
+                                    state: vadState,
+                                    config: .default
+                                )
+
+                                // Update state for next chunk
+                                self.vadStreamState = streamResult.state
+
+                            } catch {
+                                // VAD processing error - state stays at previous value
+                            }
+                        }
+
+                        // Use triggered state from most recent VAD result
+                        audioIsLoud = vadState.triggered
+
+                    } else {
+                        // Fallback to RMS if VAD not initialized (use converted buffer)
+                        audioIsLoud = self.isAudioLoudEnough(converted16kHzBuffer)
+                    }
+                }
+                // In idle mode, audioIsLoud stays false - no processing
+
+                // Pre-roll - write CONVERTED 16kHz buffer (not raw hardware buffer)
+                if self.currentMode != .idle {
+                    self.rollingBuffer?.write(converted16kHzBuffer)
+                }
 
                 // Segment handling - only run automatic detection if in autoVAD mode
                 if self.currentMode == .autoVAD {
@@ -529,7 +595,10 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                         if !isCurrentlyRecordingSegment {
                             self.bridgedLog("🔊 Speech detected! Starting AUTO segment (mode: \(self.currentMode))")
                             self.currentSegmentIsManual = false
-                            self.startNewSegment(with: tapFormat)
+                            // Use target 16kHz format for file writing
+                            if let targetFormat = self.targetFormat {
+                                self.startNewSegment(with: targetFormat)
+                            }
                         }
                         self.silenceFrameCount = 0
                     } else if isCurrentlyRecordingSegment {
@@ -575,19 +644,16 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                     }
                 }
 
-                // Write to file if recording
-                if let segmentFile = self.currentSegmentFile {
+                // Write to file ONLY if recording a segment AND not in idle mode
+                // Write the CONVERTED 16kHz buffer (not the raw hardware buffer)
+                if self.currentMode != .idle, let segmentFile = self.currentSegmentFile {
                     do {
-                        try segmentFile.write(from: buffer)
+                        try segmentFile.write(from: converted16kHzBuffer)
                     } catch {
                         self.bridgedLog("❌ Failed to write buffer: \(error.localizedDescription)")
                     }
                 }
             }
-
-            // Set mode to idle when recording starts (will switch to VAD/manual via mode control methods)
-            self.currentMode = .idle
-            self.bridgedLog("🔄 Recording mode: idle (waiting for mode switch)")
 
             promise.resolve(withResult: ())
 
@@ -620,7 +686,6 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
             // Clean up VAD resources
             self.vadManager = nil
             self.vadStreamState = nil
-            self.speechConfidence = 0.0
             self.bridgedLog("🧹 VAD resources cleaned up")
 
             // Reset mode to idle
@@ -661,13 +726,13 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
             }
 
             // Always start a fresh segment for manual recording
-            guard let engine = self.audioEngine else {
-                promise.reject(withError: RuntimeError.error(withMessage: "Audio engine not initialized"))
+            guard let targetFormat = self.targetFormat else {
+                promise.reject(withError: RuntimeError.error(withMessage: "Target format not initialized"))
                 return
             }
 
-            let tapFormat = engine.inputNode.inputFormat(forBus: 0)
-            self.startNewSegment(with: tapFormat)
+            // Use target 16kHz format for manual recording
+            self.startNewSegment(with: targetFormat)
             self.bridgedLog("🗣️ Manual segment started (alarm/day residue)")
 
             promise.resolve(withResult: ())
