@@ -129,6 +129,12 @@ export interface Sound
   // Manual silence timeout callback (called when 15s of silence detected in manual mode)
   setManualSilenceCallback(callback: () => void): void;
 
+  // Debug logging methods
+  getDebugLogPath(): string | null;
+  getAllDebugLogPaths(): string[];
+  readDebugLog(path?: string): string | null;
+  clearDebugLogs(): Promise<void>;
+
   // Utility methods
   mmss(secs: number): string;
   mmssss(milisecs: number): string;

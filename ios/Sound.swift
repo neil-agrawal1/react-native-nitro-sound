@@ -126,6 +126,7 @@ import FluidAudio
     private var silenceCounter = 0
     private let silenceThreshold = 25  // ~0.5 second of silence before ending segment
     private var segmentStartTime: Date?  // Track when segment started for duration calculation
+    private var shouldSkipNextAutoSegment: Bool = false  // Skip first segment after VAD activation
 
     // Output directory for segments
     private var outputDirectory: URL?
@@ -361,6 +362,51 @@ import FluidAudio
 
     // MARK: - File Writing Methods
 
+    private func trimLastSeconds(_ seconds: Double, fromFileAt url: URL) throws {
+        // Read the original file
+        let originalFile = try AVAudioFile(forReading: url)
+        let format = originalFile.processingFormat
+        let sampleRate = format.sampleRate
+        let totalFrames = originalFile.length
+
+        // Calculate frames to keep (remove last N seconds)
+        let framesToRemove = AVAudioFramePosition(seconds * sampleRate)
+        let framesToKeep = max(0, totalFrames - framesToRemove)
+
+        guard framesToKeep > 0 else {
+            bridgedLog("⚠️ Trim would remove entire file, skipping")
+            return
+        }
+
+        // Create temp file
+        let tempURL = url.deletingLastPathComponent()
+            .appendingPathComponent("temp_trim_\(UUID().uuidString).wav")
+        let trimmedFile = try AVAudioFile(forWriting: tempURL, settings: format.settings)
+
+        // Read and write frames in chunks
+        let bufferSize: AVAudioFrameCount = 4096
+        var framesRead: AVAudioFramePosition = 0
+
+        while framesRead < framesToKeep {
+            let framesToRead = min(bufferSize, AVAudioFrameCount(framesToKeep - framesRead))
+            guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: framesToRead) else {
+                throw RuntimeError.error(withMessage: "Failed to create buffer for trimming")
+            }
+
+            try originalFile.read(into: buffer, frameCount: framesToRead)
+            try trimmedFile.write(from: buffer)
+
+            framesRead += AVAudioFramePosition(buffer.frameLength)
+        }
+
+        // Replace original with trimmed version
+        try FileManager.default.removeItem(at: url)
+        try FileManager.default.moveItem(at: tempURL, to: url)
+
+        let trimmedDuration = Double(framesToKeep) / sampleRate
+        bridgedLog("✂️ Trimmed \(seconds)s from file, new duration: \(String(format: "%.1f", trimmedDuration))s")
+    }
+
         // Replace your existing startNewSegment() with this version:
 private func startNewSegment(with tapFormat: AVAudioFormat) {
     guard let outputDir = outputDirectory else {
@@ -593,11 +639,17 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                     let isCurrentlyRecordingSegment = self.currentSegmentFile != nil
                     if audioIsLoud {
                         if !isCurrentlyRecordingSegment {
-                            self.bridgedLog("🔊 Speech detected! Starting AUTO segment (mode: \(self.currentMode))")
-                            self.currentSegmentIsManual = false
-                            // Use target 16kHz format for file writing
-                            if let targetFormat = self.targetFormat {
-                                self.startNewSegment(with: targetFormat)
+                            // Skip first segment after VAD mode activation
+                            if self.shouldSkipNextAutoSegment {
+                                self.bridgedLog("⏭️ Skipping first AUTO segment after VAD activation")
+                                self.shouldSkipNextAutoSegment = false
+                            } else {
+                                self.bridgedLog("🔊 Speech detected! Starting AUTO segment (mode: \(self.currentMode))")
+                                self.currentSegmentIsManual = false
+                                // Use target 16kHz format for file writing
+                                if let targetFormat = self.targetFormat {
+                                    self.startNewSegment(with: targetFormat)
+                                }
                             }
                         }
                         self.silenceFrameCount = 0
@@ -631,8 +683,23 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                         }
 
                         if self.manualSilenceFrameCount >= self.manualSilenceThreshold {
-                            self.bridgedLog("🤫 15 seconds of silence detected in MANUAL mode, stopping recording")
+                            self.bridgedLog("🤫 15 seconds of silence detected in MANUAL mode, trimming and stopping recording")
                             self.manualSilenceFrameCount = 0  // Reset counter
+
+                            // Save file URL before closing
+                            let fileURL = self.currentSegmentFile?.url
+
+                            // End the current segment (closes the file)
+                            self.endCurrentSegment()
+
+                            // Trim the last 15 seconds from the file
+                            if let url = fileURL {
+                                do {
+                                    try self.trimLastSeconds(15.0, fromFileAt: url)
+                                } catch {
+                                    self.bridgedLog("⚠️ Failed to trim silence: \(error.localizedDescription)")
+                                }
+                            }
 
                             // Notify JavaScript via callback
                             if let callback = self.manualSilenceCallback {
@@ -787,7 +854,8 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
             self.currentMode = .autoVAD
             self.silenceFrameCount = 0
             self.currentSegmentIsManual = false
-            self.bridgedLog("✅ Switched to VAD mode (automatic segmentation)")
+            self.shouldSkipNextAutoSegment = true  // Skip first detection after mode switch
+            self.bridgedLog("✅ Switched to VAD mode (automatic segmentation, will skip first detection)")
 
             promise.resolve(withResult: ())
         }
@@ -1121,12 +1189,40 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
         // Log to native console
         NSLog("%@", message)
 
+        // Log to file for debugging
+        FileLogger.shared.log(message)
+
         // Send to JavaScript if callback is available
         if let callback = self.logCallback {
             DispatchQueue.main.async {
                 callback(message)
             }
         }
+    }
+
+    public func getDebugLogPath() throws -> String? {
+        return FileLogger.shared.getCurrentLogPath()
+    }
+
+    public func getAllDebugLogPaths() throws -> [String] {
+        return FileLogger.shared.getAllLogPaths()
+    }
+
+    public func readDebugLog(path: String?) throws -> String? {
+        if let path = path {
+            return FileLogger.shared.readLog(at: path)
+        } else {
+            return FileLogger.shared.readCurrentLog()
+        }
+    }
+
+    public func clearDebugLogs() throws -> Promise<Void> {
+        let promise = Promise<Void>()
+
+        FileLogger.shared.clearAllLogs()
+        promise.resolve(withResult: ())
+
+        return promise
     }
 
     // MARK: - Utility Methods
