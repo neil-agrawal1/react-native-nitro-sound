@@ -471,6 +471,7 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
 
         // Get file info before closing
         let filename = segmentFile.url.lastPathComponent
+        let fileURL = segmentFile.url
 
         // Get relative path from Documents directory for cross-device compatibility
         let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].path
@@ -479,12 +480,33 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
 
         let isManual = self.currentSegmentIsManual
         let modeType = isManual ? "MANUAL" : "AUTO"
-        bridgedLog("🛑 Ended \(modeType) segment: \(filename) (duration: \(durationString))")
-        bridgedLog("📤 Calling callback with relativePath: \(filePath), isManual: \(isManual), duration: \(duration)s")
 
-        // Close the file
+        // Close the file first
         currentSegmentFile = nil
         segmentStartTime = nil  // Reset start time
+
+        // Check if this is the first AUTO segment after VAD activation that should be skipped
+        if !isManual && self.shouldSkipNextAutoSegment {
+            bridgedLog("🗑️ Skipping first AUTO segment after VAD activation: \(filename)")
+            bridgedLog("   Deleting file and not notifying JavaScript")
+
+            // Delete the file
+            do {
+                try FileManager.default.removeItem(at: fileURL)
+                bridgedLog("✅ Deleted skipped segment: \(filename)")
+            } catch {
+                bridgedLog("⚠️ Failed to delete skipped segment: \(error.localizedDescription)")
+            }
+
+            // Reset the flag
+            self.shouldSkipNextAutoSegment = false
+            silenceCounter = 0
+            return  // Don't fire callback
+        }
+
+        // Normal segment handling
+        bridgedLog("🛑 Ended \(modeType) segment: \(filename) (duration: \(durationString))")
+        bridgedLog("📤 Calling callback with relativePath: \(filePath), isManual: \(isManual), duration: \(duration)s")
 
         // Notify JavaScript via callback
         if let callback = self.segmentCallback {
