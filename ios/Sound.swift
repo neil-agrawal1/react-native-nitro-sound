@@ -45,6 +45,12 @@ import FluidAudio
     private var shouldLoopPlayback: Bool = false
     private var currentPlaybackURI: String?
 
+    // Seamless looping with crossfade
+    private var loopCrossfadeTimer: DispatchSourceTimer?
+    private var loopCrossfadeDuration: TimeInterval = 0.020  // 20ms crossfade
+    private var isLoopCrossfadeActive: Bool = false
+    private var playbackVolume: Float = 1.0  // Track desired playback volume for crossfades
+
     private var playTimer: Timer?
 
     // Removed recordBackListener - only used with AVAudioRecorder
@@ -983,13 +989,8 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
 
                 // Schedule file for playback
                 if self.shouldLoopPlayback {
-                    // Pre-schedule multiple iterations for seamless looping
-                    playerNode.scheduleFile(audioFile, at: nil, completionHandler: nil)
-                    playerNode.scheduleFile(audioFile, at: nil, completionHandler: nil)
-                    playerNode.scheduleFile(audioFile, at: nil) { [weak self] in
-                        // When 3rd iteration completes, schedule 3 more
-                        self?.scheduleMoreLoops(audioFile: audioFile, playerNode: playerNode)
-                    }
+                    // Use crossfade looping for seamless M4A loops
+                    self.startSeamlessLoop(audioFile: audioFile, url: url)
                 } else {
                     // Non-looping: schedule file with completion handler that stops the player
                     playerNode.scheduleFile(audioFile, at: nil) { [weak self] in
@@ -1019,6 +1020,95 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
         return promise
     }
 
+    // MARK: - Seamless Loop Methods
+
+    private func startSeamlessLoop(audioFile: AVAudioFile, url: URL) {
+        guard let primaryNode = self.currentPlayerNode else { return }
+
+        // Schedule first playback
+        primaryNode.scheduleFile(audioFile, at: nil, completionHandler: nil)
+
+        // Calculate when to trigger crossfade (20ms before end)
+        let totalDuration = Double(audioFile.length) / audioFile.fileFormat.sampleRate
+        let crossfadeStartTime = max(0, totalDuration - self.loopCrossfadeDuration)
+
+        self.bridgedLog("🔁 Starting seamless loop (duration: \(String(format: "%.2f", totalDuration))s, crossfade at: \(String(format: "%.3f", crossfadeStartTime))s)")
+
+        // Schedule crossfade timer
+        self.scheduleLoopCrossfade(after: crossfadeStartTime, audioFile: audioFile, url: url)
+    }
+
+    private func scheduleLoopCrossfade(after delay: TimeInterval, audioFile: AVAudioFile, url: URL) {
+        // Cancel any existing timer
+        self.loopCrossfadeTimer?.cancel()
+        self.loopCrossfadeTimer = nil
+
+        // Create new timer
+        let timer = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .userInitiated))
+        timer.schedule(deadline: .now() + delay)
+
+        timer.setEventHandler { [weak self] in
+            guard let self = self else { return }
+
+            // Check if looping is still enabled
+            guard self.shouldLoopPlayback else {
+                self.bridgedLog("🛑 Loop disabled, stopping crossfade timer")
+                return
+            }
+
+            self.triggerSeamlessLoopCrossfade(audioFile: audioFile, url: url)
+        }
+
+        self.loopCrossfadeTimer = timer
+        timer.resume()
+    }
+
+    private func triggerSeamlessLoopCrossfade(audioFile: AVAudioFile, url: URL) {
+        guard self.shouldLoopPlayback, !self.isLoopCrossfadeActive else { return }
+
+        self.isLoopCrossfadeActive = true
+
+        // Get alternate player node
+        let newNode: AVAudioPlayerNode
+        let oldNode = self.currentPlayerNode!
+
+        if self.activePlayer == .playerA {
+            newNode = self.audioPlayerNodeB!
+            self.activePlayer = .playerB
+        } else {
+            newNode = self.audioPlayerNodeA!
+            self.activePlayer = .playerA
+        }
+
+        self.bridgedLog("🔄 Crossfading loop: \(self.activePlayer == .playerA ? "B→A" : "A→B")")
+
+        // Prepare new node
+        newNode.stop()
+        newNode.reset()
+        newNode.volume = 0.0
+        newNode.scheduleFile(audioFile, at: nil, completionHandler: nil)
+        newNode.play()
+
+        // Schedule next crossfade IMMEDIATELY (before crossfade completes)
+        // This ensures timing is relative to when playback STARTED, not when fade finishes
+        let totalDuration = Double(audioFile.length) / audioFile.fileFormat.sampleRate
+        let crossfadeStartTime = max(0, totalDuration - self.loopCrossfadeDuration)
+        self.scheduleLoopCrossfade(after: crossfadeStartTime, audioFile: audioFile, url: url)
+
+        // Crossfade (20ms) - respect current playback volume
+        self.fadeVolume(node: oldNode, from: self.playbackVolume, to: 0.0, duration: self.loopCrossfadeDuration) {
+            oldNode.stop()
+            oldNode.reset()
+        }
+
+        self.fadeVolume(node: newNode, from: 0.0, to: self.playbackVolume, duration: self.loopCrossfadeDuration) { [weak self] in
+            guard let self = self else { return }
+
+            // Update current player reference and reset flag
+            self.currentPlayerNode = newNode
+            self.isLoopCrossfadeActive = false
+        }
+    }
 
     public func setLoopEnabled(enabled: Bool) throws -> Promise<String> {
         let promise = Promise<String>()
@@ -1046,6 +1136,11 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
 
     public func stopPlayer() throws -> Promise<String> {
         let promise = Promise<String>()
+
+        // Cancel loop crossfade timer
+        self.loopCrossfadeTimer?.cancel()
+        self.loopCrossfadeTimer = nil
+        self.isLoopCrossfadeActive = false
 
         // Stop AND RESET both player nodes
         if let playerA = self.audioPlayerNodeA {
@@ -1133,6 +1228,9 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
 
     public func setVolume(volume: Double) throws -> Promise<String> {
         let promise = Promise<String>()
+
+        // Store the desired playback volume for crossfades
+        self.playbackVolume = Float(volume)
 
         if let playerNode = self.currentPlayerNode {
             playerNode.volume = Float(volume)
@@ -1642,6 +1740,7 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
     deinit {
         playTimer?.invalidate()
         crossfadeTimer?.invalidate()
+        loopCrossfadeTimer?.cancel()
 
         // Cleanup unified audio engine if needed
         if let engine = audioEngine {
