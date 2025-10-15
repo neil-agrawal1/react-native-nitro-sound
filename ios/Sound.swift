@@ -991,10 +991,12 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                         self?.scheduleMoreLoops(audioFile: audioFile, playerNode: playerNode)
                     }
                 } else {
-                    // Non-looping: schedule file with completion
+                    // Non-looping: schedule file with completion handler that stops the player
                     playerNode.scheduleFile(audioFile, at: nil) { [weak self] in
                         DispatchQueue.main.async {
-                            self?.handlePlaybackCompletion()
+                            // Stop the player so isPlaying becomes false
+                            playerNode.stop()
+                            // Timer will detect !isPlaying and fire completion events
                         }
                     }
                 }
@@ -1553,39 +1555,36 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
             self.playTimer = Timer.scheduledTimer(withTimeInterval: self.subscriptionDuration, repeats: true) { [weak self] timer in
                 guard let self = self else { return }
 
-                // First check if we have a player node and listener
+                // Check if we have a player node and audio file
                 guard let playerNode = self.currentPlayerNode,
-                      let audioFile = self.currentAudioFile,
-                      let listener = self.playBackListener else {
+                      let audioFile = self.currentAudioFile else {
                     self.stopPlayTimer()
                     return
                 }
 
-                // Check if player node is still playing
-                if !playerNode.isPlaying {
-                    // Send final callback if duration is available
-                    let durationSeconds = Double(audioFile.length) / audioFile.fileFormat.sampleRate
-                    let durationMs = durationSeconds * 1000
-                    if durationMs > 0 {
-                        self.emitPlaybackEndEvents(durationMs: durationMs, includePlaybackUpdate: true)
-                    }
-
-                    self.stopPlayTimer()
+                // If no listener is registered yet, continue running the timer
+                // The listener may be registered shortly after playback starts
+                guard let listener = self.playBackListener else {
                     return
                 }
 
                 // Calculate current position for AVAudioPlayerNode
-                // This is an approximation - for accurate position tracking, we'd need to use AVAudioTime
                 let durationSeconds = Double(audioFile.length) / audioFile.fileFormat.sampleRate
                 let durationMs = durationSeconds * 1000
 
-                // Get the player node's current time (this is approximate)
+                // Check if playback has finished
+                if !playerNode.isPlaying {
+                    self.emitPlaybackEndEvents(durationMs: durationMs, includePlaybackUpdate: true)
+                    self.stopPlayTimer()
+                    return
+                }
+
+                // Get the player node's current time
                 var currentTimeMs: Double = 0
                 if let nodeTime = playerNode.lastRenderTime,
                    let playerTime = playerNode.playerTime(forNodeTime: nodeTime) {
                     currentTimeMs = Double(playerTime.sampleTime) / playerTime.sampleRate * 1000
                 }
-
 
                 let playBack = PlayBackType(
                     isMuted: false,
@@ -1594,14 +1593,6 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                 )
 
                 listener(playBack)
-
-                // Check if playback finished - use a small threshold for floating point comparison
-                let threshold = 100.0 // 100ms threshold
-                if durationMs > 0 && currentTimeMs >= (durationMs - threshold) {
-                    self.emitPlaybackEndEvents(durationMs: durationMs, includePlaybackUpdate: true)
-                    self.stopPlayTimer()
-                    return
-                }
             }
 
         }
