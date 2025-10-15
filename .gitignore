@@ -82,7 +82,7 @@ ios-build.log
 kotlin-compiler-*
 
 # Nitrogen generated files
-nitrogen/generated/
+# nitrogen/generated/  # Commented out: committing generated files for EAS builds
 
 # Testing
 coverage/
