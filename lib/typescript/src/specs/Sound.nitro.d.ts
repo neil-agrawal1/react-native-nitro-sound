@@ -71,6 +71,8 @@ export interface Sound extends HybridObject<{
     seekToPlayer(time: number): Promise<string>;
     setVolume(volume: number): Promise<string>;
     setPlaybackSpeed(playbackSpeed: number): Promise<string>;
+    getCurrentPosition(): Promise<number>;
+    getDuration(): Promise<number>;
     setLoopEnabled(enabled: boolean): Promise<string>;
     restartEngine(): Promise<void>;
     crossfadeTo(uri: string, duration?: number): Promise<string>;

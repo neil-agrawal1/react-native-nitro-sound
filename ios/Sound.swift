@@ -1350,6 +1350,49 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
         return promise
     }
 
+    public func getCurrentPosition() throws -> Promise<Double> {
+        let promise = Promise<Double>()
+
+        guard let playerNode = self.currentPlayerNode,
+              let audioFile = self.currentAudioFile,
+              playerNode.isPlaying else {
+            promise.resolve(withResult: 0.0)
+            return promise
+        }
+
+        // Get last render time to calculate current position
+        guard let nodeTime = playerNode.lastRenderTime,
+              let playerTime = playerNode.playerTime(forNodeTime: nodeTime) else {
+            promise.resolve(withResult: 0.0)
+            return promise
+        }
+
+        // Calculate position in milliseconds
+        let sampleRate = audioFile.fileFormat.sampleRate
+        let positionSeconds = Double(playerTime.sampleTime) / sampleRate
+        let positionMs = positionSeconds * 1000.0
+
+        promise.resolve(withResult: positionMs)
+        return promise
+    }
+
+    public func getDuration() throws -> Promise<Double> {
+        let promise = Promise<Double>()
+
+        guard let audioFile = self.currentAudioFile else {
+            promise.resolve(withResult: 0.0)
+            return promise
+        }
+
+        // Calculate duration in milliseconds
+        let sampleRate = audioFile.fileFormat.sampleRate
+        let durationSeconds = Double(audioFile.length) / sampleRate
+        let durationMs = durationSeconds * 1000.0
+
+        promise.resolve(withResult: durationMs)
+        return promise
+    }
+
     // MARK: - Subscription
 
     public func setSubscriptionDuration(sec: Double) throws {

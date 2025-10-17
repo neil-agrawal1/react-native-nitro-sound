@@ -417,6 +417,44 @@ open class HybridSoundSpec_cxx {
   }
   
   @inline(__always)
+  public final func getCurrentPosition() -> bridge.Result_std__shared_ptr_Promise_double___ {
+    do {
+      let __result = try self.__implementation.getCurrentPosition()
+      let __resultCpp = { () -> bridge.std__shared_ptr_Promise_double__ in
+        let __promise = bridge.create_std__shared_ptr_Promise_double__()
+        let __promiseHolder = bridge.wrap_std__shared_ptr_Promise_double__(__promise)
+        __result
+          .then({ __result in __promiseHolder.resolve(__result) })
+          .catch({ __error in __promiseHolder.reject(__error.toCpp()) })
+        return __promise
+      }()
+      return bridge.create_Result_std__shared_ptr_Promise_double___(__resultCpp)
+    } catch (let __error) {
+      let __exceptionPtr = __error.toCpp()
+      return bridge.create_Result_std__shared_ptr_Promise_double___(__exceptionPtr)
+    }
+  }
+  
+  @inline(__always)
+  public final func getDuration() -> bridge.Result_std__shared_ptr_Promise_double___ {
+    do {
+      let __result = try self.__implementation.getDuration()
+      let __resultCpp = { () -> bridge.std__shared_ptr_Promise_double__ in
+        let __promise = bridge.create_std__shared_ptr_Promise_double__()
+        let __promiseHolder = bridge.wrap_std__shared_ptr_Promise_double__(__promise)
+        __result
+          .then({ __result in __promiseHolder.resolve(__result) })
+          .catch({ __error in __promiseHolder.reject(__error.toCpp()) })
+        return __promise
+      }()
+      return bridge.create_Result_std__shared_ptr_Promise_double___(__resultCpp)
+    } catch (let __error) {
+      let __exceptionPtr = __error.toCpp()
+      return bridge.create_Result_std__shared_ptr_Promise_double___(__exceptionPtr)
+    }
+  }
+  
+  @inline(__always)
   public final func setLoopEnabled(enabled: Bool) -> bridge.Result_std__shared_ptr_Promise_std__string___ {
     do {
       let __result = try self.__implementation.setLoopEnabled(enabled: enabled)

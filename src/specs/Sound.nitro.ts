@@ -92,6 +92,10 @@ export interface Sound
   setVolume(volume: number): Promise<string>;
   setPlaybackSpeed(playbackSpeed: number): Promise<string>;
 
+  // Position/duration query methods (milliseconds)
+  getCurrentPosition(): Promise<number>;
+  getDuration(): Promise<number>;
+
   // Loop control methods
   setLoopEnabled(enabled: boolean): Promise<string>;
 

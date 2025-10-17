@@ -102,6 +102,14 @@ abstract class HybridSoundSpec: HybridObject() {
   
   @DoNotStrip
   @Keep
+  abstract fun getCurrentPosition(): Promise<Double>
+  
+  @DoNotStrip
+  @Keep
+  abstract fun getDuration(): Promise<Double>
+  
+  @DoNotStrip
+  @Keep
   abstract fun setLoopEnabled(enabled: Boolean): Promise<String>
   
   @DoNotStrip

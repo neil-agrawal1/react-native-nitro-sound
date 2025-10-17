@@ -37,6 +37,14 @@ namespace margelo::nitro::sound::bridge::swift {
     };
   }
   
+  // pragma MARK: std::function<void(double /* result */)>
+  Func_void_double create_Func_void_double(void* NON_NULL swiftClosureWrapper) noexcept {
+    auto swiftClosure = NitroSound::Func_void_double::fromUnsafe(swiftClosureWrapper);
+    return [swiftClosure = std::move(swiftClosure)](double result) mutable -> void {
+      swiftClosure.call(result);
+    };
+  }
+  
   // pragma MARK: std::function<void(const RecordBackType& /* recordingMeta */)>
   Func_void_RecordBackType create_Func_void_RecordBackType(void* NON_NULL swiftClosureWrapper) noexcept {
     auto swiftClosure = NitroSound::Func_void_RecordBackType::fromUnsafe(swiftClosureWrapper);
