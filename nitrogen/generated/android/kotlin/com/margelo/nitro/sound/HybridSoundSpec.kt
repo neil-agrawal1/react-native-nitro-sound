@@ -217,6 +217,6 @@ abstract class HybridSoundSpec: HybridObject() {
   private external fun initHybrid(): HybridData
 
   companion object {
-    private const val TAG = "HybridSoundSpec"
+    protected const val TAG = "HybridSoundSpec"
   }
 }
