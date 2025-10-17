@@ -1218,10 +1218,101 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
     public func seekToPlayer(time: Double) throws -> Promise<String> {
         let promise = Promise<String>()
 
-        // Note: AVAudioPlayerNode doesn't support seeking directly like AVAudioPlayer
-        // This would require stopping, rescheduling from the seek position, and restarting
-        // For now, we'll indicate that seeking is not supported with player nodes
-        promise.reject(withError: RuntimeError.error(withMessage: "Seeking is not currently supported with unified audio engine"))
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self,
+                  let playerNode = self.currentPlayerNode,
+                  let audioFile = self.currentAudioFile else {
+                promise.reject(withError: RuntimeError.error(withMessage: "No active playback"))
+                return
+            }
+
+            // Calculate and clamp frame position
+            let sampleRate = audioFile.fileFormat.sampleRate
+            let totalFrames = audioFile.length
+            let timeInSeconds = time / 1000.0  // Convert milliseconds to seconds
+            let targetFrame = AVAudioFramePosition(timeInSeconds * sampleRate)
+            let clampedFrame = max(0, min(targetFrame, totalFrames))
+            let remainingFrames = totalFrames - clampedFrame
+
+            // Guard: If no frames left to play, stop playback
+            guard remainingFrames > 0 else {
+                playerNode.stop()
+                let seekTimeSeconds = Double(clampedFrame) / sampleRate
+                promise.resolve(withResult: "Seeked to end (\(String(format: "%.1f", seekTimeSeconds))s)")
+                return
+            }
+
+            // Preserve state
+            let wasPlaying = playerNode.isPlaying
+            let volume = playerNode.volume
+
+            // Cancel old crossfade timer (invalidated by seek)
+            self.loopCrossfadeTimer?.cancel()
+            self.loopCrossfadeTimer = nil
+            self.isLoopCrossfadeActive = false
+
+            // Stop and reset
+            playerNode.stop()
+            playerNode.reset()
+
+            // Schedule from new position
+            if self.shouldLoopPlayback {
+                // Use scheduleSegment for precise frame control
+                playerNode.scheduleSegment(
+                    audioFile,
+                    startingFrame: clampedFrame,
+                    frameCount: AVAudioFrameCount(remainingFrames),
+                    at: nil,
+                    completionHandler: nil
+                )
+
+                // Calculate remaining duration
+                let totalDuration = Double(totalFrames) / sampleRate
+                let seekTime = Double(clampedFrame) / sampleRate
+                let remainingDuration = totalDuration - seekTime
+
+                // Recalculate crossfade timing
+                let crossfadeStartTime = max(0, remainingDuration - self.loopCrossfadeDuration)
+
+                self.bridgedLog("🔍 Seeked to \(String(format: "%.2f", seekTime))s, crossfade in \(String(format: "%.2f", crossfadeStartTime))s")
+
+                // Get URL and reschedule crossfade
+                if let uri = self.currentPlaybackURI {
+                    let url: URL
+                    if uri.hasPrefix("http") {
+                        url = URL(string: uri)!
+                    } else if uri.hasPrefix("file://") {
+                        url = URL(string: uri)!
+                    } else {
+                        url = URL(fileURLWithPath: uri)
+                    }
+
+                    self.scheduleLoopCrossfade(after: crossfadeStartTime, audioFile: audioFile, url: url)
+                }
+
+            } else {
+                // Non-looping: schedule with completion handler
+                playerNode.scheduleSegment(
+                    audioFile,
+                    startingFrame: clampedFrame,
+                    frameCount: AVAudioFrameCount(remainingFrames),
+                    at: nil
+                ) { [weak self] in
+                    DispatchQueue.main.async {
+                        playerNode.stop()
+                    }
+                }
+            }
+
+            // Restore state
+            playerNode.volume = volume
+            if wasPlaying {
+                playerNode.play()
+            }
+
+            let seekTimeSeconds = Double(clampedFrame) / sampleRate
+            promise.resolve(withResult: "Seeked to \(String(format: "%.1f", seekTimeSeconds))s")
+        }
 
         return promise
     }
