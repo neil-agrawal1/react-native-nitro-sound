@@ -51,6 +51,9 @@ import FluidAudio
     private var isLoopCrossfadeActive: Bool = false
     private var playbackVolume: Float = 1.0  // Track desired playback volume for crossfades
 
+    // Track starting frame offset for getCurrentPosition after seek
+    private var startingFrameOffset: AVAudioFramePosition = 0
+
     private var playTimer: Timer?
 
     // Removed recordBackListener - only used with AVAudioRecorder
@@ -973,6 +976,9 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
 
                 self.currentAudioFile = audioFile
 
+                // Reset starting frame offset (playing from beginning)
+                self.startingFrameOffset = 0
+
                 // Get the current player node (will alternate for crossfading in future)
                 guard let playerNode = self.getCurrentPlayerNode() else {
                     promise.reject(withError: RuntimeError.error(withMessage: "Failed to get player node"))
@@ -1255,6 +1261,9 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
             playerNode.stop()
             playerNode.reset()
 
+            // Save the starting frame offset for getCurrentPosition
+            self.startingFrameOffset = clampedFrame
+
             // Schedule from new position
             if self.shouldLoopPlayback {
                 // Use scheduleSegment for precise frame control
@@ -1368,8 +1377,10 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
         }
 
         // Calculate position in milliseconds
+        // Add the starting frame offset to account for seeks
         let sampleRate = audioFile.fileFormat.sampleRate
-        let positionSeconds = Double(playerTime.sampleTime) / sampleRate
+        let totalSampleTime = self.startingFrameOffset + playerTime.sampleTime
+        let positionSeconds = Double(totalSampleTime) / sampleRate
         let positionMs = positionSeconds * 1000.0
 
         promise.resolve(withResult: positionMs)
