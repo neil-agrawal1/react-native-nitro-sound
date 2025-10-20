@@ -135,7 +135,6 @@ import FluidAudio
     private var silenceCounter = 0
     private let silenceThreshold = 25  // ~0.5 second of silence before ending segment
     private var segmentStartTime: Date?  // Track when segment started for duration calculation
-    private var shouldSkipNextAutoSegment: Bool = false  // Skip first segment after VAD activation
 
     // Output directory for segments
     private var outputDirectory: URL?
@@ -494,26 +493,7 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
         currentSegmentFile = nil
         segmentStartTime = nil  // Reset start time
 
-        // Check if this is the first AUTO segment after VAD activation that should be skipped
-        if !isManual && self.shouldSkipNextAutoSegment {
-            bridgedLog("🗑️ Skipping first AUTO segment after VAD activation: \(filename)")
-            bridgedLog("   Deleting file and not notifying JavaScript")
-
-            // Delete the file
-            do {
-                try FileManager.default.removeItem(at: fileURL)
-                bridgedLog("✅ Deleted skipped segment: \(filename)")
-            } catch {
-                bridgedLog("⚠️ Failed to delete skipped segment: \(error.localizedDescription)")
-            }
-
-            // Reset the flag
-            self.shouldSkipNextAutoSegment = false
-            silenceCounter = 0
-            return  // Don't fire callback
-        }
-
-        // Normal segment handling
+        // Notify JavaScript
         bridgedLog("🛑 Ended \(modeType) segment: \(filename) (duration: \(durationString))")
         bridgedLog("📤 Calling callback with relativePath: \(filePath), isManual: \(isManual), duration: \(duration)s")
 
@@ -670,17 +650,11 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                     let isCurrentlyRecordingSegment = self.currentSegmentFile != nil
                     if audioIsLoud {
                         if !isCurrentlyRecordingSegment {
-                            // Skip first segment after VAD mode activation
-                            if self.shouldSkipNextAutoSegment {
-                                self.bridgedLog("⏭️ Skipping first AUTO segment after VAD activation")
-                                self.shouldSkipNextAutoSegment = false
-                            } else {
-                                self.bridgedLog("🔊 Speech detected! Starting AUTO segment (mode: \(self.currentMode))")
-                                self.currentSegmentIsManual = false
-                                // Use target 16kHz format for file writing
-                                if let targetFormat = self.targetFormat {
-                                    self.startNewSegment(with: targetFormat)
-                                }
+                            self.bridgedLog("🔊 Speech detected! Starting AUTO segment (mode: \(self.currentMode))")
+                            self.currentSegmentIsManual = false
+                            // Use target 16kHz format for file writing
+                            if let targetFormat = self.targetFormat {
+                                self.startNewSegment(with: targetFormat)
                             }
                         }
                         self.silenceFrameCount = 0
@@ -941,8 +915,7 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
             self.currentMode = .autoVAD
             self.silenceFrameCount = 0
             self.currentSegmentIsManual = false
-            self.shouldSkipNextAutoSegment = true  // Skip first detection after mode switch
-            self.bridgedLog("✅ Switched to VAD mode (automatic segmentation, will skip first detection)")
+            self.bridgedLog("✅ Switched to VAD mode (automatic segmentation)")
 
             promise.resolve(withResult: ())
         }
