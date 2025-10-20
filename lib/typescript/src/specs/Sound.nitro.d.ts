@@ -61,6 +61,8 @@ export interface Sound extends HybridObject<{
     setVADMode(): Promise<void>;
     setManualMode(): Promise<void>;
     setIdleMode(): Promise<void>;
+    startManualSegment(): Promise<void>;
+    stopManualSegment(): Promise<void>;
     setVADThreshold(threshold: number): Promise<void>;
     pauseRecorder(): Promise<string>;
     resumeRecorder(): Promise<string>;

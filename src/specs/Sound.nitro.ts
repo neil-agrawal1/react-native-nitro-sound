@@ -73,6 +73,10 @@ export interface Sound
   setManualMode(): Promise<void>;
   setIdleMode(): Promise<void>;
 
+  // Manual segment control (separate from mode setting)
+  startManualSegment(): Promise<void>;
+  stopManualSegment(): Promise<void>;
+
   // VAD configuration
   setVADThreshold(threshold: number): Promise<void>;
 

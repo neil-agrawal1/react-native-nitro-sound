@@ -19,6 +19,8 @@ public protocol HybridSoundSpec_protocol: HybridObject {
   func setVADMode() throws -> Promise<Void>
   func setManualMode() throws -> Promise<Void>
   func setIdleMode() throws -> Promise<Void>
+  func startManualSegment() throws -> Promise<Void>
+  func stopManualSegment() throws -> Promise<Void>
   func setVADThreshold(threshold: Double) throws -> Promise<Void>
   func pauseRecorder() throws -> Promise<String>
   func resumeRecorder() throws -> Promise<String>

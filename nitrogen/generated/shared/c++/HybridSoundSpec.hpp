@@ -66,6 +66,8 @@ namespace margelo::nitro::sound {
       virtual std::shared_ptr<Promise<void>> setVADMode() = 0;
       virtual std::shared_ptr<Promise<void>> setManualMode() = 0;
       virtual std::shared_ptr<Promise<void>> setIdleMode() = 0;
+      virtual std::shared_ptr<Promise<void>> startManualSegment() = 0;
+      virtual std::shared_ptr<Promise<void>> stopManualSegment() = 0;
       virtual std::shared_ptr<Promise<void>> setVADThreshold(double threshold) = 0;
       virtual std::shared_ptr<Promise<std::string>> pauseRecorder() = 0;
       virtual std::shared_ptr<Promise<std::string>> resumeRecorder() = 0;

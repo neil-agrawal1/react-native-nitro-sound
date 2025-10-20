@@ -62,6 +62,14 @@ abstract class HybridSoundSpec: HybridObject() {
   
   @DoNotStrip
   @Keep
+  abstract fun startManualSegment(): Promise<Unit>
+  
+  @DoNotStrip
+  @Keep
+  abstract fun stopManualSegment(): Promise<Unit>
+  
+  @DoNotStrip
+  @Keep
   abstract fun setVADThreshold(threshold: Double): Promise<Unit>
   
   @DoNotStrip

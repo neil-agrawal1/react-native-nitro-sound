@@ -819,20 +819,76 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
 
             // Force close any existing segment (might be from auto detection)
             if self.currentSegmentFile != nil {
-                self.bridgedLog("⚠️ Closing existing auto segment before manual recording")
+                self.bridgedLog("⚠️ Closing existing auto segment before manual mode")
                 self.endCurrentSegment()
             }
 
-            // Always start a fresh segment for manual recording
+            self.bridgedLog("✅ Manual mode set (ready for manual segment recording)")
+
+            promise.resolve(withResult: ())
+        }
+
+        return promise
+    }
+
+    public func startManualSegment() throws -> Promise<Void> {
+        let promise = Promise<Void>()
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else {
+                promise.reject(withError: RuntimeError.error(withMessage: "Self is nil"))
+                return
+            }
+
+            // Verify we're in manual mode
+            guard self.currentMode == .manual else {
+                promise.reject(withError: RuntimeError.error(withMessage: "Not in manual mode. Call setManualMode() first."))
+                return
+            }
+
+            // If already recording a segment, stop it first
+            if self.currentSegmentFile != nil {
+                self.bridgedLog("⚠️ Stopping existing manual segment before starting new one")
+                self.endCurrentSegment()
+            }
+
+            // Verify target format is available
             guard let targetFormat = self.targetFormat else {
                 promise.reject(withError: RuntimeError.error(withMessage: "Target format not initialized"))
                 return
             }
 
-            // Use target 16kHz format for manual recording
-            self.startNewSegment(with: targetFormat)
-            self.bridgedLog("🗣️ Manual segment started (alarm/day residue)")
+            // Reset silence counter
+            self.manualSilenceFrameCount = 0
 
+            // Start new manual segment
+            self.startNewSegment(with: targetFormat)
+            self.bridgedLog("🗣️ Manual segment started")
+
+            promise.resolve(withResult: ())
+        }
+
+        return promise
+    }
+
+    public func stopManualSegment() throws -> Promise<Void> {
+        let promise = Promise<Void>()
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else {
+                promise.reject(withError: RuntimeError.error(withMessage: "Self is nil"))
+                return
+            }
+
+            // End current segment if one exists
+            if self.currentSegmentFile != nil {
+                self.bridgedLog("🛑 Stopping manual segment")
+                self.endCurrentSegment()
+            } else {
+                self.bridgedLog("ℹ️ No segment to stop (no-op)")
+            }
+
+            // Stay in manual mode (as per user's answer)
             promise.resolve(withResult: ())
         }
 

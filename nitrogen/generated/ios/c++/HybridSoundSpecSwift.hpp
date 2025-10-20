@@ -110,6 +110,22 @@ namespace margelo::nitro::sound {
       auto __value = std::move(__result.value());
       return __value;
     }
+    inline std::shared_ptr<Promise<void>> startManualSegment() override {
+      auto __result = _swiftPart.startManualSegment();
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+      auto __value = std::move(__result.value());
+      return __value;
+    }
+    inline std::shared_ptr<Promise<void>> stopManualSegment() override {
+      auto __result = _swiftPart.stopManualSegment();
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+      auto __value = std::move(__result.value());
+      return __value;
+    }
     inline std::shared_ptr<Promise<void>> setVADThreshold(double threshold) override {
       auto __result = _swiftPart.setVADThreshold(std::forward<decltype(threshold)>(threshold));
       if (__result.hasError()) [[unlikely]] {
