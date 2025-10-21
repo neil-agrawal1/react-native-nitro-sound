@@ -469,14 +469,6 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
     private func endCurrentSegment() {
         guard let segmentFile = currentSegmentFile else { return }
 
-        // Calculate duration in seconds
-        var duration: Double = 0
-        var durationString = "unknown"
-        if let startTime = segmentStartTime {
-            duration = Date().timeIntervalSince(startTime)
-            durationString = String(format: "%.1f seconds", duration)
-        }
-
         // Get file info before closing
         let filename = segmentFile.url.lastPathComponent
         let fileURL = segmentFile.url
@@ -492,6 +484,19 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
         // Close the file first
         currentSegmentFile = nil
         segmentStartTime = nil  // Reset start time
+
+        // Calculate ACTUAL duration from the audio file (not timestamps)
+        // This ensures trimmed files report correct duration
+        var duration: Double = 0
+        var durationString = "unknown"
+
+        do {
+            let audioFile = try AVAudioFile(forReading: fileURL)
+            duration = Double(audioFile.length) / audioFile.processingFormat.sampleRate
+            durationString = String(format: "%.1f seconds", duration)
+        } catch {
+            bridgedLog("⚠️ Could not read audio file duration: \(error.localizedDescription)")
+        }
 
         // Notify JavaScript
         bridgedLog("🛑 Ended \(modeType) segment: \(filename) (duration: \(durationString))")
@@ -1005,6 +1010,17 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
 
                 self.currentAudioFile = audioFile
 
+                // Diagnostic logging for M4A playback debugging
+                self.bridgedLog("📊 AUDIO FILE DIAGNOSTICS:")
+                self.bridgedLog("  📁 File: \(url.lastPathComponent)")
+                self.bridgedLog("  📏 Frame count: \(audioFile.length) frames")
+                self.bridgedLog("  🎵 File format rate: \(audioFile.fileFormat.sampleRate) Hz")
+                self.bridgedLog("  ⚙️ Processing format rate: \(audioFile.processingFormat.sampleRate) Hz")
+                let fileDuration = Double(audioFile.length) / audioFile.fileFormat.sampleRate
+                let processingDuration = Double(audioFile.length) / audioFile.processingFormat.sampleRate
+                self.bridgedLog("  ⏱️ Duration (file rate): \(String(format: "%.2f", fileDuration))s")
+                self.bridgedLog("  ⏱️ Duration (processing rate): \(String(format: "%.2f", processingDuration))s")
+
                 // Reset starting frame offset (playing from beginning)
                 self.startingFrameOffset = 0
 
@@ -1029,9 +1045,24 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                 } else {
                     // Non-looping: schedule file with completion handler that stops the player
                     playerNode.scheduleFile(audioFile, at: nil) { [weak self] in
+                        guard let self = self else { return }
+
+                        // Get current position when completion fires
+                        var currentPos: Double = 0
+                        if let nodeTime = playerNode.lastRenderTime,
+                           let playerTime = playerNode.playerTime(forNodeTime: nodeTime) {
+                            currentPos = Double(playerTime.sampleTime) / audioFile.fileFormat.sampleRate
+                        }
+
+                        self.bridgedLog("🎬 scheduleFile COMPLETION HANDLER fired!")
+                        self.bridgedLog("  ⏱️ Position when fired: \(String(format: "%.2f", currentPos))s")
+                        self.bridgedLog("  📊 Expected duration: \(String(format: "%.2f", Double(audioFile.length) / audioFile.fileFormat.sampleRate))s")
+                        self.bridgedLog("  ▶️ Node isPlaying before stop: \(playerNode.isPlaying)")
+
                         DispatchQueue.main.async {
                             // Stop the player so isPlaying becomes false
                             playerNode.stop()
+                            self.bridgedLog("  ⏹️ Called playerNode.stop()")
                             // Timer will detect !isPlaying and fire completion events
                         }
                     }
@@ -1424,10 +1455,13 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
             return promise
         }
 
-        // Calculate duration in milliseconds
-        let sampleRate = audioFile.fileFormat.sampleRate
-        let durationSeconds = Double(audioFile.length) / sampleRate
+        // Get actual playable duration (uses AVAsset for M4A to exclude AAC padding)
+        let durationSeconds = getActualDurationSeconds(audioFile: audioFile)
         let durationMs = durationSeconds * 1000.0
+
+        if audioFile.url.pathExtension.lowercased() == "m4a" {
+            bridgedLog("⏱️ M4A duration via AVAsset: \(String(format: "%.2f", durationSeconds))s (excludes padding)")
+        }
 
         promise.resolve(withResult: durationMs)
         return promise
@@ -1817,6 +1851,19 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
 
     // Removed stopRecordTimer - only needed for AVAudioRecorder
 
+    /// Get actual playable duration in seconds for the current audio file
+    /// For M4A files, uses AVAsset (respects iTunSMPB, excludes padding)
+    /// For other formats, uses AVAudioFile
+    private func getActualDurationSeconds(audioFile: AVAudioFile) -> Double {
+        let fileURL = audioFile.url
+        if fileURL.pathExtension.lowercased() == "m4a" {
+            let asset = AVAsset(url: fileURL)
+            return CMTimeGetSeconds(asset.duration)
+        } else {
+            return Double(audioFile.length) / audioFile.fileFormat.sampleRate
+        }
+    }
+
     private func startPlayTimer() {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
@@ -1834,37 +1881,55 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                     return
                 }
 
-                // If no listener is registered yet, continue running the timer
-                // The listener may be registered shortly after playback starts
-                guard let listener = self.playBackListener else {
+                // Continue running timer if EITHER listener is registered
+                // This allows playback end detection even without progress updates
+                guard self.playBackListener != nil || self.playbackEndListener != nil else {
                     return
                 }
 
-                // Calculate current position for AVAudioPlayerNode
-                let durationSeconds = Double(audioFile.length) / audioFile.fileFormat.sampleRate
+                // Calculate actual playable duration (uses AVAsset for M4A to exclude padding)
+                let durationSeconds = self.getActualDurationSeconds(audioFile: audioFile)
                 let durationMs = durationSeconds * 1000
 
-                // Check if playback has finished
+                // Check if playback has finished (ALWAYS check, even if no playBackListener)
                 if !playerNode.isPlaying {
+                    // Get position when timer detected stop
+                    var stopPos: Double = 0
+                    if let nodeTime = playerNode.lastRenderTime,
+                       let playerTime = playerNode.playerTime(forNodeTime: nodeTime) {
+                        stopPos = Double(playerTime.sampleTime) / audioFile.fileFormat.sampleRate
+                    }
+
+                    self.bridgedLog("⏹️ TIMER detected playback stopped!")
+                    self.bridgedLog("  ⏱️ Position when detected: \(String(format: "%.2f", stopPos))s")
+                    self.bridgedLog("  📊 Expected duration: \(String(format: "%.2f", durationSeconds))s")
+                    self.bridgedLog("  ⚠️ Difference: \(String(format: "%.2f", durationSeconds - stopPos))s early")
+
+                    // Emit playback end events (will emit to both listeners if registered)
                     self.emitPlaybackEndEvents(durationMs: durationMs, includePlaybackUpdate: true)
                     self.stopPlayTimer()
                     return
                 }
 
-                // Get the player node's current time
-                var currentTimeMs: Double = 0
-                if let nodeTime = playerNode.lastRenderTime,
-                   let playerTime = playerNode.playerTime(forNodeTime: nodeTime) {
-                    currentTimeMs = Double(playerTime.sampleTime) / playerTime.sampleRate * 1000
+                // Emit progress updates ONLY if playBackListener is registered
+                if let listener = self.playBackListener {
+                    // Get the player node's current time
+                    var currentTimeMs: Double = 0
+                    if let nodeTime = playerNode.lastRenderTime,
+                       let playerTime = playerNode.playerTime(forNodeTime: nodeTime) {
+                        // Use audio file's sample rate, not hardware output rate
+                        let sampleRate = audioFile.fileFormat.sampleRate
+                        currentTimeMs = Double(playerTime.sampleTime) / sampleRate * 1000
+                    }
+
+                    let playBack = PlayBackType(
+                        isMuted: false,
+                        duration: durationMs,
+                        currentPosition: currentTimeMs
+                    )
+
+                    listener(playBack)
                 }
-
-                let playBack = PlayBackType(
-                    isMuted: false,
-                    duration: durationMs,
-                    currentPosition: currentTimeMs
-                )
-
-                listener(playBack)
             }
 
         }
