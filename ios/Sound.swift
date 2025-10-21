@@ -54,6 +54,9 @@ import FluidAudio
     // Track starting frame offset for getCurrentPosition after seek
     private var startingFrameOffset: AVAudioFramePosition = 0
 
+    // Cache last valid position to avoid returning 0 during player state transitions
+    private var lastValidPosition: Double = 0.0
+
     private var playTimer: Timer?
 
     // Removed recordBackListener - only used with AVAudioRecorder
@@ -1245,6 +1248,9 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
         self.shouldLoopPlayback = false
         self.currentPlaybackURI = nil
 
+        // Reset position cache
+        self.lastValidPosition = 0.0
+
         // Keep the unified engine running for recording or future playback
         promise.resolve(withResult: "Player stopped")
 
@@ -1380,6 +1386,10 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
             }
 
             let seekTimeSeconds = Double(clampedFrame) / sampleRate
+
+            // Update position cache to the seeked position (in milliseconds)
+            self.lastValidPosition = seekTimeSeconds * 1000.0
+
             promise.resolve(withResult: "Seeked to \(String(format: "%.1f", seekTimeSeconds))s")
         }
 
@@ -1425,14 +1435,16 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
         guard let playerNode = self.currentPlayerNode,
               let audioFile = self.currentAudioFile,
               playerNode.isPlaying else {
-            promise.resolve(withResult: 0.0)
+            // Return cached position instead of 0 when player is paused/transitioning
+            promise.resolve(withResult: self.lastValidPosition)
             return promise
         }
 
         // Get last render time to calculate current position
         guard let nodeTime = playerNode.lastRenderTime,
               let playerTime = playerNode.playerTime(forNodeTime: nodeTime) else {
-            promise.resolve(withResult: 0.0)
+            // Return cached position instead of 0 when timing info unavailable
+            promise.resolve(withResult: self.lastValidPosition)
             return promise
         }
 
@@ -1442,6 +1454,9 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
         let totalSampleTime = self.startingFrameOffset + playerTime.sampleTime
         let positionSeconds = Double(totalSampleTime) / sampleRate
         let positionMs = positionSeconds * 1000.0
+
+        // Cache the valid position before returning
+        self.lastValidPosition = positionMs
 
         promise.resolve(withResult: positionMs)
         return promise
