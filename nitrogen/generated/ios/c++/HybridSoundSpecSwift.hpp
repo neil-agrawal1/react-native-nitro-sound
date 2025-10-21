@@ -20,8 +20,8 @@ namespace margelo::nitro::sound { struct PlayBackType; }
 namespace margelo::nitro::sound { struct PlaybackEndType; }
 
 #include <NitroModules/Promise.hpp>
-#include <string>
 #include <optional>
+#include <string>
 #include <unordered_map>
 #include "RecordBackType.hpp"
 #include <functional>
@@ -110,8 +110,8 @@ namespace margelo::nitro::sound {
       auto __value = std::move(__result.value());
       return __value;
     }
-    inline std::shared_ptr<Promise<void>> startManualSegment() override {
-      auto __result = _swiftPart.startManualSegment();
+    inline std::shared_ptr<Promise<void>> startManualSegment(std::optional<double> silenceTimeoutSeconds) override {
+      auto __result = _swiftPart.startManualSegment(silenceTimeoutSeconds);
       if (__result.hasError()) [[unlikely]] {
         std::rethrow_exception(__result.error());
       }

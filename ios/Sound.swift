@@ -123,9 +123,9 @@ import FluidAudio
         return outputBuffer
     }
 
-    // Manual mode silence detection (15 seconds at ~14 fps = 210 frames)
+    // Manual mode silence detection (default 15 seconds at ~14 fps = 210 frames)
     private var manualSilenceFrameCount: Int = 0
-    private let manualSilenceThreshold: Int = 210  // ~15 seconds of silence at observed 14 fps
+    private var manualSilenceThreshold: Int = 210  // Configurable, defaults to ~15 seconds at observed 14 fps
 
     // Rolling buffer for 3-second pre-roll (pre-allocated)
     private var rollingBuffer: RollingAudioBuffer?
@@ -813,7 +813,7 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
         return promise
     }
 
-    public func startManualSegment() throws -> Promise<Void> {
+    public func startManualSegment(silenceTimeoutSeconds: Double?) throws -> Promise<Void> {
         let promise = Promise<Void>()
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
@@ -839,6 +839,11 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                 promise.reject(withError: RuntimeError.error(withMessage: "Target format not initialized"))
                 return
             }
+
+            // Configure silence timeout (default to 15 seconds if not provided)
+            let timeoutSeconds = silenceTimeoutSeconds ?? 15.0
+            self.manualSilenceThreshold = Int(timeoutSeconds * 14)  // ~14 fps from VAD analysis
+            self.bridgedLog("🔇 Manual silence timeout set to \(timeoutSeconds)s (\(self.manualSilenceThreshold) frames)")
 
             // Reset silence counter
             self.manualSilenceFrameCount = 0

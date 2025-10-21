@@ -63,7 +63,7 @@ abstract class HybridSoundSpec: HybridObject() {
   
   @DoNotStrip
   @Keep
-  abstract fun startManualSegment(): Promise<Unit>
+  abstract fun startManualSegment(silenceTimeoutSeconds: Double?): Promise<Unit>
   
   @DoNotStrip
   @Keep

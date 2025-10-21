@@ -135,9 +135,9 @@ namespace margelo::nitro::sound {
       return __promise;
     }();
   }
-  std::shared_ptr<Promise<void>> JHybridSoundSpec::startManualSegment() {
-    static const auto method = javaClassStatic()->getMethod<jni::local_ref<JPromise::javaobject>()>("startManualSegment");
-    auto __result = method(_javaPart);
+  std::shared_ptr<Promise<void>> JHybridSoundSpec::startManualSegment(std::optional<double> silenceTimeoutSeconds) {
+    static const auto method = javaClassStatic()->getMethod<jni::local_ref<JPromise::javaobject>(jni::alias_ref<jni::JDouble> /* silenceTimeoutSeconds */)>("startManualSegment");
+    auto __result = method(_javaPart, silenceTimeoutSeconds.has_value() ? jni::JDouble::valueOf(silenceTimeoutSeconds.value()) : nullptr);
     return [&]() {
       auto __promise = Promise<void>::create();
       __result->cthis()->addOnResolvedListener([=](const jni::alias_ref<jni::JObject>& /* unit */) {

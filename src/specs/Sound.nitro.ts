@@ -74,7 +74,7 @@ export interface Sound
   setIdleMode(): Promise<void>;
 
   // Manual segment control (separate from mode setting)
-  startManualSegment(): Promise<void>;
+  startManualSegment(silenceTimeoutSeconds?: number): Promise<void>;
   stopManualSegment(): Promise<void>;
 
   // VAD configuration

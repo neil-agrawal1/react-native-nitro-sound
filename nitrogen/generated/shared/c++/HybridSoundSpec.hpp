@@ -21,8 +21,8 @@ namespace margelo::nitro::sound { struct PlayBackType; }
 namespace margelo::nitro::sound { struct PlaybackEndType; }
 
 #include <NitroModules/Promise.hpp>
-#include <string>
 #include <optional>
+#include <string>
 #include <unordered_map>
 #include "RecordBackType.hpp"
 #include <functional>
@@ -66,7 +66,7 @@ namespace margelo::nitro::sound {
       virtual std::shared_ptr<Promise<void>> setVADMode() = 0;
       virtual std::shared_ptr<Promise<void>> setManualMode() = 0;
       virtual std::shared_ptr<Promise<void>> setIdleMode() = 0;
-      virtual std::shared_ptr<Promise<void>> startManualSegment() = 0;
+      virtual std::shared_ptr<Promise<void>> startManualSegment(std::optional<double> silenceTimeoutSeconds) = 0;
       virtual std::shared_ptr<Promise<void>> stopManualSegment() = 0;
       virtual std::shared_ptr<Promise<void>> setVADThreshold(double threshold) = 0;
       virtual std::shared_ptr<Promise<std::string>> pauseRecorder() = 0;
