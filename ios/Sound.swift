@@ -1072,14 +1072,11 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                         self.bridgedLog("🎬 scheduleFile COMPLETION HANDLER fired!")
                         self.bridgedLog("  ⏱️ Position when fired: \(String(format: "%.2f", currentPos))s")
                         self.bridgedLog("  📊 Expected duration: \(String(format: "%.2f", Double(audioFile.length) / audioFile.fileFormat.sampleRate))s")
-                        self.bridgedLog("  ▶️ Node isPlaying before stop: \(playerNode.isPlaying)")
+                        self.bridgedLog("  ▶️ Node isPlaying: \(playerNode.isPlaying)")
 
-                        DispatchQueue.main.async {
-                            // Stop the player so isPlaying becomes false
-                            playerNode.stop()
-                            self.bridgedLog("  ⏹️ Called playerNode.stop()")
-                            // Timer will detect !isPlaying and fire completion events
-                        }
+                        // DO NOT call stop() here - this completion handler fires when the buffer is SCHEDULED,
+                        // not when playback ends. Calling stop() here causes premature audio cutoff.
+                        // The timer-based detection (60ms polling of isPlaying) handles actual playback completion.
                     }
                 }
 
@@ -1665,6 +1662,11 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                 newNode.stop()
                 newNode.volume = 0.0
 
+                // Reset position tracking for new track (BEFORE updating currentAudioFile)
+                // This prevents getCurrentPosition() from using mismatched file/node/offset during crossfade
+                self.startingFrameOffset = 0
+                self.lastValidPosition = 0.0
+
                 // Store audio file reference early to ensure it's retained for looping
                 self.currentAudioFile = audioFile
 
@@ -1917,6 +1919,21 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                 // Calculate actual playable duration (uses AVAsset for M4A to exclude padding)
                 let durationSeconds = self.getActualDurationSeconds(audioFile: audioFile)
                 let durationMs = durationSeconds * 1000
+
+                // Get current playback position from audio hardware
+                var currentTimeSeconds: Double = 0
+                if let nodeTime = playerNode.lastRenderTime,
+                   let playerTime = playerNode.playerTime(forNodeTime: nodeTime) {
+                    currentTimeSeconds = Double(playerTime.sampleTime) / audioFile.fileFormat.sampleRate
+                }
+
+                // Check if we've reached the end of the audio file
+                // Use a small tolerance (0.05s) to account for timing precision
+                if playerNode.isPlaying && currentTimeSeconds >= (durationSeconds - 0.05) {
+                    self.bridgedLog("🎯 Timer detected playback reached end at \(String(format: "%.2f", currentTimeSeconds))s / \(String(format: "%.2f", durationSeconds))s")
+                    playerNode.stop()
+                    // Next timer tick (60ms) will detect !isPlaying and fire completion
+                }
 
                 // Check if playback has finished (ALWAYS check, even if no playBackListener)
                 if !playerNode.isPlaying {
