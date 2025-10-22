@@ -615,15 +615,22 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                 if self.currentMode == .autoVAD || self.currentMode == .manual {
                     if let vadMgr = self.vadManager,
                        let vadState = self.vadStreamState {
-                        // Process VAD asynchronously (runs in background)
+
+                        // Extract Float array from CONVERTED 16kHz buffer SYNCHRONOUSLY
+                        // (before launching async Task to avoid buffer deallocation race condition)
+                        guard let floatChannelData = converted16kHzBuffer.floatChannelData,
+                              floatChannelData[0] != nil else {
+                            // Buffer data is invalid, fallback to RMS
+                            audioIsLoud = self.isAudioLoudEnough(converted16kHzBuffer)
+                            return
+                        }
+                        let frameLength = Int(converted16kHzBuffer.frameLength)
+                        let samples = Array(UnsafeBufferPointer(start: floatChannelData[0], count: frameLength))
+
+                        // Process VAD asynchronously (runs in background) with COPIED samples
                         Task {
                             do {
-                                // Extract Float array from CONVERTED 16kHz buffer
-                                guard let floatChannelData = converted16kHzBuffer.floatChannelData else { return }
-                                let frameLength = Int(converted16kHzBuffer.frameLength)
-                                let samples = Array(UnsafeBufferPointer(start: floatChannelData[0], count: frameLength))
-
-                                // Use public streaming API
+                                // Use public streaming API with the samples we copied above
                                 let streamResult = try await vadMgr.processStreamingChunk(
                                     samples,
                                     state: vadState,
