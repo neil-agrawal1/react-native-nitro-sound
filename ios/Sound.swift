@@ -680,6 +680,53 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
         return (filename: filename, filePath: filePath, fileURL: fileURL, isManual: isManual)
     }
 
+    /// Process a segment with trim + resample, then fire callback
+    /// Use this for ALL manual segments to ensure proper playback speed
+    private func processAndFireSegmentCallback(metadata: (filename: String, filePath: String, fileURL: URL, isManual: Bool), trimSeconds: Double) {
+        // Trim silence from the end
+        bridgedLog("✂️ Starting trim of last \(String(format: "%.1f", trimSeconds)) seconds from file...")
+        do {
+            try self.trimLastSeconds(trimSeconds, fromFileAt: metadata.fileURL)
+            bridgedLog("✅ Trim completed successfully")
+        } catch {
+            bridgedLog("⚠️ Failed to trim silence but continuing: \(error.localizedDescription)")
+        }
+
+        // Resample 16kHz to 44.1kHz for correct playback speed
+        bridgedLog("🔄 Starting resample to 44.1kHz...")
+        do {
+            try self.resampleRecording(fileURL: metadata.fileURL)
+            bridgedLog("✅ Resample completed successfully")
+        } catch {
+            bridgedLog("⚠️ Resampling failed but continuing: \(error.localizedDescription)")
+            bridgedLog("   File will be stored at original sample rate (may play at wrong speed)")
+        }
+
+        // Read the actual processed file duration
+        var actualDuration: Double = 0
+        do {
+            let processedFile = try AVAudioFile(forReading: metadata.fileURL)
+            actualDuration = Double(processedFile.length) / processedFile.processingFormat.sampleRate
+
+            bridgedLog("📊 Final processed file stats:")
+            bridgedLog("   - Frames: \(processedFile.length)")
+            bridgedLog("   - Sample rate: \(processedFile.processingFormat.sampleRate)Hz")
+            bridgedLog("   - Actual duration: \(String(format: "%.2f", actualDuration))s")
+        } catch {
+            bridgedLog("❌ Failed to read processed file: \(error.localizedDescription)")
+            bridgedLog("   Callback will fire with 0 duration")
+        }
+
+        // Fire callback with processed file info
+        bridgedLog("📤 Calling callback with relativePath: \(metadata.filePath), isManual: \(metadata.isManual), duration: \(actualDuration)s")
+        if let callback = self.segmentCallback {
+            callback(metadata.filename, metadata.filePath, metadata.isManual, actualDuration)
+            bridgedLog("✅ Callback fired for \(metadata.filename)")
+        } else {
+            bridgedLog("⚠️ No callback set for segment")
+        }
+    }
+
     /// Ends the current segment and fires the callback immediately
     /// Use this for segments that don't need post-processing
     private func endCurrentSegment() {
@@ -975,53 +1022,9 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                                 return
                             }
 
-                            // Process the audio file (trim silence, then resample)
-                            // Continue even if processing fails - always try to fire callback
+                            // Process the audio file (trim silence, then resample) and fire callback
                             let silenceDurationSeconds = Double(self.manualSilenceThreshold) / 14.0
-
-                            self.bridgedLog("✂️ Starting trim of last \(String(format: "%.1f", silenceDurationSeconds)) seconds from file...")
-                            do {
-                                try self.trimLastSeconds(silenceDurationSeconds, fromFileAt: metadata.fileURL)
-                                self.bridgedLog("✅ Trim completed successfully")
-                            } catch {
-                                self.bridgedLog("⚠️ Failed to trim silence but continuing: \(error.localizedDescription)")
-                            }
-
-                            // Resample 16kHz to 44.1kHz for correct playback speed
-                            self.bridgedLog("🔄 Starting resample to 44.1kHz...")
-                            do {
-                                try self.resampleRecording(fileURL: metadata.fileURL)
-                                self.bridgedLog("✅ Resample completed successfully")
-                            } catch {
-                                self.bridgedLog("⚠️ Resampling failed but continuing: \(error.localizedDescription)")
-                                self.bridgedLog("   File will be stored at original sample rate (may play at wrong speed)")
-                            }
-
-                            // NOW read the actual processed file and ALWAYS fire callback
-                            // Even if reading fails, we fire callback with 0 duration rather than hanging
-                            var actualDuration: Double = 0
-                            do {
-                                let processedFile = try AVAudioFile(forReading: metadata.fileURL)
-                                actualDuration = Double(processedFile.length) / processedFile.processingFormat.sampleRate
-
-                                self.bridgedLog("📊 Final processed file stats:")
-                                self.bridgedLog("   - Frames: \(processedFile.length)")
-                                self.bridgedLog("   - Sample rate: \(processedFile.processingFormat.sampleRate)Hz")
-                                self.bridgedLog("   - Actual duration: \(String(format: "%.2f", actualDuration))s")
-                            } catch {
-                                self.bridgedLog("❌ Failed to read processed file: \(error.localizedDescription)")
-                                self.bridgedLog("   Callback will fire with 0 duration (better than hanging)")
-                                // actualDuration stays 0
-                            }
-
-                            // ALWAYS fire callback - even if duration is 0, let JS handle it
-                            self.bridgedLog("📤 Calling callback with relativePath: \(metadata.filePath), isManual: \(metadata.isManual), duration: \(actualDuration)s")
-                            if let callback = self.segmentCallback {
-                                callback(metadata.filename, metadata.filePath, metadata.isManual, actualDuration)
-                                self.bridgedLog("✅ Callback fired for \(metadata.filename)")
-                            } else {
-                                self.bridgedLog("⚠️ No callback set for segment")
-                            }
+                            self.processAndFireSegmentCallback(metadata: metadata, trimSeconds: silenceDurationSeconds)
 
                             // Notify JavaScript via callback
                             if let callback = self.manualSilenceCallback {
@@ -1064,7 +1067,12 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
             // End any current segment before stopping
             if self.currentSegmentFile != nil {
                 self.bridgedLog("🛑 Ending current segment before stopping recorder")
-                self.endCurrentSegment()
+
+                // Get metadata and process with trim + resample
+                if let metadata = self.endCurrentSegmentWithoutCallback() {
+                    // Use 0 seconds trim for manual stop (no silence to remove)
+                    self.processAndFireSegmentCallback(metadata: metadata, trimSeconds: 0)
+                }
             }
 
             // Remove tap from unified engine's input node
@@ -1179,7 +1187,12 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
             // End current segment if one exists
             if self.currentSegmentFile != nil {
                 self.bridgedLog("🛑 Stopping manual segment")
-                self.endCurrentSegment()
+
+                // Get metadata and process with trim + resample
+                if let metadata = self.endCurrentSegmentWithoutCallback() {
+                    // Use 0 seconds trim for manual stop (no silence to remove)
+                    self.processAndFireSegmentCallback(metadata: metadata, trimSeconds: 0)
+                }
             } else {
                 self.bridgedLog("ℹ️ No segment to stop (no-op)")
             }
