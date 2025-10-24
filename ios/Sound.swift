@@ -986,7 +986,11 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                         self.silenceFrameCount += 1
                         if self.silenceFrameCount >= 50 {
                             self.bridgedLog("🤫 Silence detected, ending AUTO segment after 50 frames")
-                            self.endCurrentSegment()
+                            // Use same processing pipeline as manual segments (trim + resample)
+                            if let metadata = self.endCurrentSegmentWithoutCallback() {
+                                // No trim needed for auto segments (0 seconds)
+                                self.processAndFireSegmentCallback(metadata: metadata, trimSeconds: 0)
+                            }
                             self.silenceFrameCount = 0
                         }
                     }
@@ -1250,6 +1254,11 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
             self.currentMode = .autoVAD
             self.silenceFrameCount = 0
             self.currentSegmentIsManual = false
+
+            // Reset VAD state to fresh initial state (prevents false positives from stale data)
+            self.vadStreamState = VadStreamState.initial()
+            self.bridgedLog("🧹 VAD state reset to fresh initial state")
+
             self.bridgedLog("✅ Switched to VAD mode (automatic segmentation)")
 
             promise.resolve(withResult: ())
