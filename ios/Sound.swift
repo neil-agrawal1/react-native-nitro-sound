@@ -501,11 +501,22 @@ import FluidAudio
             try sourceFile.read(into: inputBuffer, frameCount: framesToRead)
             inputBuffer.frameLength = framesToRead
 
-            // Convert to output
+            // Track if input is exhausted for this chunk
+            var inputProvided = false
+
+            // Convert to output - the input block may be called multiple times per convert() call
             var error: NSError?
             let inputBlock: AVAudioConverterInputBlock = { inNumPackets, outStatus in
-                outStatus.pointee = .haveData
-                return inputBuffer
+                // Only provide the buffer once per convert() call
+                if !inputProvided {
+                    inputProvided = true
+                    outStatus.pointee = .haveData
+                    return inputBuffer
+                } else {
+                    // Input exhausted for this chunk
+                    outStatus.pointee = .noDataNow
+                    return nil
+                }
             }
 
             let status = converter.convert(to: outputBuffer, error: &error, withInputFrom: inputBlock)
@@ -518,14 +529,59 @@ import FluidAudio
                 throw RuntimeError.error(withMessage: "Converter returned error status")
             }
 
-            // Write converted audio
-            try outputFile.write(from: outputBuffer)
-            totalFramesConverted += AVAudioFramePosition(outputBuffer.frameLength)
+            // Only write if we got output data
+            if outputBuffer.frameLength > 0 {
+                try outputFile.write(from: outputBuffer)
+                totalFramesConverted += AVAudioFramePosition(outputBuffer.frameLength)
+            }
+        }
+
+        // Flush the converter to get any remaining buffered samples
+        // This is critical when upsampling - the converter buffers samples for interpolation
+        bridgedLog("   - Flushing converter buffer...")
+        var flushedFrames: AVAudioFramePosition = 0
+        var flushIterations = 0
+        while true {
+            var error: NSError?
+            let inputBlock: AVAudioConverterInputBlock = { inNumPackets, outStatus in
+                // Signal end of stream to flush buffered samples
+                outStatus.pointee = .endOfStream
+                return nil
+            }
+
+            let status = converter.convert(to: outputBuffer, error: &error, withInputFrom: inputBlock)
+
+            if let error = error {
+                bridgedLog("   ⚠️ Flush error: \(error.localizedDescription)")
+                break
+            }
+
+            // Write any flushed output
+            if outputBuffer.frameLength > 0 {
+                try outputFile.write(from: outputBuffer)
+                totalFramesConverted += AVAudioFramePosition(outputBuffer.frameLength)
+                flushedFrames += AVAudioFramePosition(outputBuffer.frameLength)
+                flushIterations += 1
+            } else {
+                // No more output, flush complete
+                break
+            }
+
+            // Safety check - prevent infinite loop
+            if flushIterations > 10 {
+                bridgedLog("   ⚠️ Flush safety limit reached")
+                break
+            }
+        }
+
+        if flushedFrames > 0 {
+            let flushedDuration = Double(flushedFrames) / outputFormat.sampleRate
+            bridgedLog("   ✅ Flushed \(flushedFrames) frames (\(String(format: "%.3f", flushedDuration))s)")
         }
 
         let outputDuration = Double(totalFramesConverted) / outputFormat.sampleRate
-        bridgedLog("   - Converted frames: \(totalFramesConverted)")
-        bridgedLog("   - Output duration: \(String(format: "%.2f", outputDuration))s")
+        bridgedLog("   - Total converted frames: \(totalFramesConverted)")
+        bridgedLog("   - Total output duration: \(String(format: "%.2f", outputDuration))s")
 
         // Replace original file with resampled version
         try FileManager.default.removeItem(at: fileURL)
@@ -594,8 +650,38 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
     }
 }
 
+    /// Ends the current segment and returns metadata for later callback
+    /// Use this when you need to process the audio file before firing the callback
+    /// Returns: Tuple with (filename, filePath, fileURL, isManual) or nil if no segment
+    private func endCurrentSegmentWithoutCallback() -> (filename: String, filePath: String, fileURL: URL, isManual: Bool)? {
+        guard let segmentFile = currentSegmentFile else { return nil }
 
+        // Get file info before closing
+        let filename = segmentFile.url.lastPathComponent
+        let fileURL = segmentFile.url
 
+        // Get relative path from Documents directory for cross-device compatibility
+        let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].path
+        let absolutePath = segmentFile.url.path
+        let filePath = absolutePath.replacingOccurrences(of: documentsPath + "/", with: "")
+
+        let isManual = self.currentSegmentIsManual
+
+        // Close the file
+        currentSegmentFile = nil
+        segmentStartTime = nil
+        silenceCounter = 0
+
+        bridgedLog("🛑 Segment closed (callback will fire after processing)")
+        bridgedLog("   - Filename: \(filename)")
+        bridgedLog("   - Relative path: \(filePath)")
+        bridgedLog("   - Is manual: \(isManual)")
+
+        return (filename: filename, filePath: filePath, fileURL: fileURL, isManual: isManual)
+    }
+
+    /// Ends the current segment and fires the callback immediately
+    /// Use this for segments that don't need post-processing
     private func endCurrentSegment() {
         guard let segmentFile = currentSegmentFile else { return }
 
@@ -616,7 +702,6 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
         segmentStartTime = nil  // Reset start time
 
         // Calculate ACTUAL duration from the audio file (not timestamps)
-        // This ensures trimmed files report correct duration
         var duration: Double = 0
         var durationString = "unknown"
         var fileSize: UInt64 = 0
@@ -640,31 +725,6 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
             bridgedLog("   - File size: \(fileSize) bytes")
         } catch {
             bridgedLog("⚠️ Could not read audio file duration: \(error.localizedDescription)")
-        }
-
-        // Resample 16kHz recordings to 44.1kHz for correct playback speed
-        do {
-            try resampleRecording(fileURL: fileURL)
-
-            // Recalculate duration after resampling (file now at 44.1kHz)
-            let resampledFile = try AVAudioFile(forReading: fileURL)
-            frameCount = resampledFile.length
-            let sampleRate = resampledFile.processingFormat.sampleRate
-            duration = Double(frameCount) / sampleRate
-            durationString = String(format: "%.1f seconds", duration)
-
-            let attributes = try FileManager.default.attributesOfItem(atPath: fileURL.path)
-            fileSize = attributes[.size] as? UInt64 ?? 0
-
-            bridgedLog("📊 Post-resample stats:")
-            bridgedLog("   - Frames: \(frameCount)")
-            bridgedLog("   - Sample rate: \(sampleRate)Hz")
-            bridgedLog("   - Duration: \(duration)s")
-            bridgedLog("   - File size: \(fileSize) bytes")
-        } catch {
-            bridgedLog("⚠️ Resampling failed: \(error.localizedDescription)")
-            bridgedLog("   File will be stored at original sample rate (may play at wrong speed)")
-            // Continue anyway - callback will fire with original file
         }
 
         // Notify JavaScript
@@ -777,46 +837,75 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                 // VAD-based speech detection - ONLY when needed
                 var audioIsLoud = false
 
+                // Log VAD status once at the start
+                if self.tapFrameCounter == 1 {
+                    let vadInitialized = (self.vadManager != nil && self.vadStreamState != nil)
+                    self.bridgedLog("🎙️ TAP CALLBACK STARTED")
+                    self.bridgedLog("   - Mode: \(self.currentMode)")
+                    self.bridgedLog("   - VAD initialized: \(vadInitialized)")
+                    self.bridgedLog("   - VAD threshold: \(self.vadThreshold)")
+                }
+
                 // Only compute VAD if we're in a mode that needs it
                 if self.currentMode == .autoVAD || self.currentMode == .manual {
                     if let vadMgr = self.vadManager,
                        let vadState = self.vadStreamState {
 
                         // Extract Float array from CONVERTED 16kHz buffer SYNCHRONOUSLY
-                        // (before launching async Task to avoid buffer deallocation race condition)
-                        guard let floatChannelData = converted16kHzBuffer.floatChannelData,
-                              floatChannelData[0] != nil else {
-                            // Buffer data is invalid, fallback to RMS
-                            audioIsLoud = self.isAudioLoudEnough(converted16kHzBuffer)
-                            return
-                        }
-                        let frameLength = Int(converted16kHzBuffer.frameLength)
-                        let samples = Array(UnsafeBufferPointer(start: floatChannelData[0], count: frameLength))
+                        // Check if buffer has valid float channel data
+                        if let floatChannelData = converted16kHzBuffer.floatChannelData,
+                           floatChannelData[0] != nil {
+                            // Valid buffer - process VAD
+                            let frameLength = Int(converted16kHzBuffer.frameLength)
+                            let samples = Array(UnsafeBufferPointer(start: floatChannelData[0], count: frameLength))
 
-                        // Process VAD asynchronously (runs in background) with COPIED samples
-                        Task {
-                            do {
-                                // Use public streaming API with the samples we copied above
-                                let streamResult = try await vadMgr.processStreamingChunk(
-                                    samples,
-                                    state: vadState,
-                                    config: .default
-                                )
+                            // Process VAD asynchronously (runs in background) with COPIED samples
+                            Task {
+                                do {
+                                    // Use public streaming API with the samples we copied above
+                                    let streamResult = try await vadMgr.processStreamingChunk(
+                                        samples,
+                                        state: vadState,
+                                        config: .default
+                                    )
 
-                                // Update state for next chunk
-                                self.vadStreamState = streamResult.state
+                                    // Update state for next chunk
+                                    self.vadStreamState = streamResult.state
 
-                            } catch {
-                                // VAD processing error - state stays at previous value
+                                } catch {
+                                    // VAD processing error - state stays at previous value
+                                    self.bridgedLog("⚠️ VAD processing error: \(error.localizedDescription)")
+                                }
                             }
-                        }
 
-                        // Use triggered state from most recent VAD result
-                        audioIsLoud = vadState.triggered
+                            // Use triggered state from most recent VAD result
+                            audioIsLoud = vadState.triggered
+
+                            // Log VAD state periodically
+                            if self.tapFrameCounter % 100 == 0 {
+                                self.bridgedLog("🎤 Frame \(self.tapFrameCounter): VAD triggered = \(vadState.triggered)")
+                            }
+                        } else {
+                            // Buffer data is invalid - log and skip VAD for this frame
+                            if self.tapFrameCounter % 100 == 0 {
+                                self.bridgedLog("⚠️ Frame \(self.tapFrameCounter): Invalid floatChannelData, skipping VAD (audioIsLoud stays false)")
+                            }
+                            // audioIsLoud stays false - continue with normal buffer writing below
+                        }
 
                     } else {
-                        // Fallback to RMS if VAD not initialized (use converted buffer)
-                        audioIsLoud = self.isAudioLoudEnough(converted16kHzBuffer)
+                        // VAD not initialized yet - log this condition
+                        if self.tapFrameCounter % 200 == 0 {
+                            let vadMgrExists = (self.vadManager != nil)
+                            let vadStateExists = (self.vadStreamState != nil)
+                            self.bridgedLog("⚠️ Frame \(self.tapFrameCounter): VAD not ready (vadMgr: \(vadMgrExists), vadState: \(vadStateExists))")
+                        }
+                        // audioIsLoud stays false - no fallback available
+                    }
+
+                    // Log final audioIsLoud value periodically
+                    if self.tapFrameCounter % 100 == 0 {
+                        self.bridgedLog("🔊 Frame \(self.tapFrameCounter): audioIsLoud = \(audioIsLoud)")
                     }
                 }
                 // In idle mode, audioIsLoud stays false - no processing
@@ -836,6 +925,13 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                             // Use target 16kHz format for file writing
                             if let targetFormat = self.targetFormat {
                                 self.startNewSegment(with: targetFormat)
+                            } else {
+                                self.bridgedLog("⚠️ Cannot start segment: targetFormat is nil!")
+                            }
+                        } else {
+                            // Already recording - log periodically
+                            if self.tapFrameCounter % 100 == 0 {
+                                self.bridgedLog("🎙️ AUTO segment already recording, speech continuing (frame: \(self.tapFrameCounter))")
                             }
                         }
                         self.silenceFrameCount = 0
@@ -855,8 +951,9 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                             self.bridgedLog("🗣️ Speech detected! Resetting silence counter (was at \(self.manualSilenceFrameCount) frames)")
                             self.manualSilenceFrameCount = 0
                         }
-                        if self.tapFrameCounter % 2000 == 0 {  // Log every ~20 seconds
-                            self.bridgedLog("🎙️ MANUAL recording active (frame: \(self.tapFrameCounter))")
+                        // Log more frequently when speech is detected
+                        if self.tapFrameCounter % 100 == 0 {
+                            self.bridgedLog("🎙️ MANUAL mode: Speech detected (frame: \(self.tapFrameCounter))")
                         }
                     } else {
                         // Increment silence counter
@@ -872,23 +969,58 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                             self.bridgedLog("🤫 Silence threshold reached in MANUAL mode (\(self.manualSilenceFrameCount) frames)")
                             self.manualSilenceFrameCount = 0  // Reset counter
 
-                            // Save file URL before closing
-                            let fileURL = self.currentSegmentFile?.url
+                            // Close segment and get metadata (NO callback yet)
+                            guard let metadata = self.endCurrentSegmentWithoutCallback() else {
+                                self.bridgedLog("⚠️ No segment to end")
+                                return
+                            }
 
-                            // End the current segment (closes the file)
-                            // NOTE: This will log duration BEFORE trimming
-                            self.bridgedLog("⚠️ IMPORTANT: Ending segment BEFORE trim - duration in callback will include silence!")
-                            self.endCurrentSegment()
+                            // Process the audio file (trim silence, then resample)
+                            // Continue even if processing fails - always try to fire callback
+                            let silenceDurationSeconds = Double(self.manualSilenceThreshold) / 14.0
 
-                            // Trim the last 15 seconds from the file
-                            if let url = fileURL {
-                                self.bridgedLog("✂️ Starting trim of last 15 seconds from file...")
-                                do {
-                                    try self.trimLastSeconds(15.0, fromFileAt: url)
-                                    self.bridgedLog("✅ Trim completed successfully")
-                                } catch {
-                                    self.bridgedLog("⚠️ Failed to trim silence: \(error.localizedDescription)")
-                                }
+                            self.bridgedLog("✂️ Starting trim of last \(String(format: "%.1f", silenceDurationSeconds)) seconds from file...")
+                            do {
+                                try self.trimLastSeconds(silenceDurationSeconds, fromFileAt: metadata.fileURL)
+                                self.bridgedLog("✅ Trim completed successfully")
+                            } catch {
+                                self.bridgedLog("⚠️ Failed to trim silence but continuing: \(error.localizedDescription)")
+                            }
+
+                            // Resample 16kHz to 44.1kHz for correct playback speed
+                            self.bridgedLog("🔄 Starting resample to 44.1kHz...")
+                            do {
+                                try self.resampleRecording(fileURL: metadata.fileURL)
+                                self.bridgedLog("✅ Resample completed successfully")
+                            } catch {
+                                self.bridgedLog("⚠️ Resampling failed but continuing: \(error.localizedDescription)")
+                                self.bridgedLog("   File will be stored at original sample rate (may play at wrong speed)")
+                            }
+
+                            // NOW read the actual processed file and ALWAYS fire callback
+                            // Even if reading fails, we fire callback with 0 duration rather than hanging
+                            var actualDuration: Double = 0
+                            do {
+                                let processedFile = try AVAudioFile(forReading: metadata.fileURL)
+                                actualDuration = Double(processedFile.length) / processedFile.processingFormat.sampleRate
+
+                                self.bridgedLog("📊 Final processed file stats:")
+                                self.bridgedLog("   - Frames: \(processedFile.length)")
+                                self.bridgedLog("   - Sample rate: \(processedFile.processingFormat.sampleRate)Hz")
+                                self.bridgedLog("   - Actual duration: \(String(format: "%.2f", actualDuration))s")
+                            } catch {
+                                self.bridgedLog("❌ Failed to read processed file: \(error.localizedDescription)")
+                                self.bridgedLog("   Callback will fire with 0 duration (better than hanging)")
+                                // actualDuration stays 0
+                            }
+
+                            // ALWAYS fire callback - even if duration is 0, let JS handle it
+                            self.bridgedLog("📤 Calling callback with relativePath: \(metadata.filePath), isManual: \(metadata.isManual), duration: \(actualDuration)s")
+                            if let callback = self.segmentCallback {
+                                callback(metadata.filename, metadata.filePath, metadata.isManual, actualDuration)
+                                self.bridgedLog("✅ Callback fired for \(metadata.filename)")
+                            } else {
+                                self.bridgedLog("⚠️ No callback set for segment")
                             }
 
                             // Notify JavaScript via callback
