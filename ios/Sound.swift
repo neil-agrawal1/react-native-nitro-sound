@@ -4,6 +4,7 @@ import AVFoundation
 import NitroModules
 import SoundAnalysis
 import FluidAudio
+import Speech
 
     final class HybridSound: HybridSoundSpec_base, HybridSoundSpec_protocol, SNResultsObserving {
     // Removed AVAudioRecorder - now using unified AVAudioEngine recording
@@ -1893,6 +1894,76 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
         let seconds = totalSeconds % 60
         let milliseconds = Int(milisecs.truncatingRemainder(dividingBy: 1000)) / 10
         return String(format: "%02d:%02d:%02d", minutes, seconds, milliseconds)
+    }
+
+    // MARK: - Speech Recognition Methods
+    public func transcribeAudioFile(filePath: String) throws -> Promise<String> {
+        let promise = Promise<String>()
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else {
+                promise.reject(withError: RuntimeError.error(withMessage: "Self is nil"))
+                return
+            }
+
+            // Create recognizer
+            guard let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US")) else {
+                promise.reject(withError: RuntimeError.error(withMessage: "Speech recognizer unavailable"))
+                return
+            }
+
+            guard recognizer.isAvailable else {
+                promise.reject(withError: RuntimeError.error(withMessage: "Speech recognizer not available"))
+                return
+            }
+
+            // Ensure file:// prefix
+            var urlPath = filePath
+            if !urlPath.hasPrefix("file://") {
+                urlPath = "file://" + urlPath
+            }
+
+            guard let url = URL(string: urlPath) else {
+                promise.reject(withError: RuntimeError.error(withMessage: "Invalid file path: \(filePath)"))
+                return
+            }
+
+            // Check file exists
+            if !FileManager.default.fileExists(atPath: url.path) {
+                promise.reject(withError: RuntimeError.error(withMessage: "Audio file not found: \(url.path)"))
+                return
+            }
+
+            self.bridgedLog("🎤 Starting file transcription: \(url.lastPathComponent)")
+
+            // Create recognition request
+            let request = SFSpeechURLRecognitionRequest(url: url)
+            request.shouldReportPartialResults = false
+
+            // Start recognition task
+            recognizer.recognitionTask(with: request) { result, error in
+                if let error = error {
+                    self.bridgedLog("❌ Transcription error: \(error.localizedDescription)")
+                    promise.reject(error)
+                    return
+                }
+
+                if let result = result, result.isFinal {
+                    let transcription = result.bestTranscription.formattedString
+                    self.bridgedLog("✅ Transcription complete: \(transcription.prefix(100))...")
+                    promise.resolve(transcription)
+                } else if let result = result {
+                    // Got a result but not final - shouldn't happen with shouldReportPartialResults = false
+                    promise.resolve(result.bestTranscription.formattedString)
+                } else {
+                    // No result and no error
+                    self.bridgedLog("⚠️ Transcription returned no result")
+                    promise.resolve("")
+                }
+            }
+        }
+
+        return promise
     }
 
     // MARK: - Crossfade Methods

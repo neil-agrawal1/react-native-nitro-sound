@@ -376,6 +376,14 @@ namespace margelo::nitro::sound {
       auto __value = std::move(__result.value());
       return __value;
     }
+    inline std::shared_ptr<Promise<std::string>> transcribeAudioFile(const std::string& filePath) override {
+      auto __result = _swiftPart.transcribeAudioFile(filePath);
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+      auto __value = std::move(__result.value());
+      return __value;
+    }
 
   private:
     NitroSound::HybridSoundSpec_cxx _swiftPart;

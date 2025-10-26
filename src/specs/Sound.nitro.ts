@@ -147,4 +147,12 @@ export interface Sound
   // Utility methods
   mmss(secs: number): string;
   mmssss(milisecs: number): string;
+
+  /**
+   * Transcribe an audio file to text using iOS Speech Recognition
+   * @param filePath Path to audio file (with or without file:// prefix)
+   * @returns Promise resolving to transcribed text
+   * @throws Error if file not found or speech recognition unavailable
+   */
+  transcribeAudioFile(filePath: string): Promise<string>;
 }

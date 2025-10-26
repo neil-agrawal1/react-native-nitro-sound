@@ -234,6 +234,10 @@ abstract class HybridSoundSpec: HybridObject() {
   @DoNotStrip
   @Keep
   abstract fun mmssss(milisecs: Double): String
+  
+  @DoNotStrip
+  @Keep
+  abstract fun transcribeAudioFile(filePath: String): Promise<String>
 
   private external fun initHybrid(): HybridData
 
