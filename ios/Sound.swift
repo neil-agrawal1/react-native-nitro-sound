@@ -202,17 +202,27 @@ import FluidAudio
     }
 
     private func ensureEngineRunning() throws {
+        bridgedLog("───────────────────────────────────────────────────────")
+        bridgedLog("🔍 ENGINE STATUS CHECK")
+        bridgedLog("───────────────────────────────────────────────────────")
+
         guard let engine = audioEngine else {
             bridgedLog("❌ ENGINE: Audio engine is nil - not initialized")
             throw RuntimeError.error(withMessage: "Audio engine not initialized")
         }
 
         if !engine.isRunning {
-            bridgedLog("⚠️ ENGINE: Audio engine not running - attempting restart")
+            bridgedLog("⚠️ ENGINE: Audio engine STOPPED - attempting restart")
+            bridgedLog("───────────────────────────────────────────────────────")
+            bridgedLog("🔄 ENGINE RESTART STARTING")
+            bridgedLog("───────────────────────────────────────────────────────")
             try restartAudioEngine()
-            bridgedLog("✅ ENGINE: Audio engine restarted successfully")
+            bridgedLog("───────────────────────────────────────────────────────")
+            bridgedLog("✅ ENGINE RESTART COMPLETE")
+            bridgedLog("───────────────────────────────────────────────────────")
         } else {
-            bridgedLog("✅ ENGINE: Audio engine already running")
+            bridgedLog("✅ ENGINE: Already RUNNING - no action needed")
+            bridgedLog("───────────────────────────────────────────────────────")
         }
     }
 
@@ -222,7 +232,9 @@ import FluidAudio
             return
         }
 
-        bridgedLog("🎬 ENGINE: Initializing audio engine...")
+        bridgedLog("═══════════════════════════════════════════════════════")
+        bridgedLog("🎬 ENGINE INITIALIZATION STARTING")
+        bridgedLog("═══════════════════════════════════════════════════════")
 
         // Setup audio session ONCE for recording + playback
         let audioSession = AVAudioSession.sharedInstance()
@@ -279,6 +291,9 @@ import FluidAudio
         try engine.start()
         audioEngineInitialized = true
         bridgedLog("✅ ENGINE: Audio engine started successfully - READY FOR PLAYBACK/RECORDING")
+        bridgedLog("═══════════════════════════════════════════════════════")
+        bridgedLog("✅ ENGINE INITIALIZATION COMPLETE")
+        bridgedLog("═══════════════════════════════════════════════════════")
     }
 
 
@@ -1330,7 +1345,9 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
     public func startPlayer(uri: String?, httpHeaders: Dictionary<String, String>?) throws -> Promise<String> {
         let promise = Promise<String>()
 
-        bridgedLog("▶️ PLAYBACK: startPlayer called")
+        bridgedLog("═══════════════════════════════════════════════════════")
+        bridgedLog("▶️ PLAYBACK START REQUESTED")
+        bridgedLog("═══════════════════════════════════════════════════════")
         if let uri = uri {
             bridgedLog("📁 PLAYBACK: URI = \(uri)")
         } else {
@@ -1478,7 +1495,9 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
 
                     self.bridgedLog("▶️ PLAYBACK: Calling playerNode.play() - STARTING PLAYBACK NOW")
                     playerNode.play()
-                    self.bridgedLog("✅ PLAYBACK: playerNode.play() called - Audio should be playing!")
+                    self.bridgedLog("═══════════════════════════════════════════════════════")
+                    self.bridgedLog("✅ PLAYBACK ACTIVE - AUDIO IS NOW PLAYING")
+                    self.bridgedLog("═══════════════════════════════════════════════════════")
 
                     promise.resolve(withResult: uri)
                 }
