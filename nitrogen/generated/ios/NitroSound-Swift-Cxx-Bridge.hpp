@@ -26,7 +26,6 @@ namespace NitroSound { class HybridSoundSpec_cxx; }
 #include "PlayBackType.hpp"
 #include "PlaybackEndType.hpp"
 #include "RecordBackType.hpp"
-#include <NitroModules/FastVectorCopy.hpp>
 #include <NitroModules/Promise.hpp>
 #include <NitroModules/PromiseHolder.hpp>
 #include <NitroModules/Result.hpp>
