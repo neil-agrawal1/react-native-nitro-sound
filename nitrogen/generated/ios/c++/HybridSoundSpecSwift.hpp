@@ -322,6 +322,12 @@ namespace margelo::nitro::sound {
         std::rethrow_exception(__result.error());
       }
     }
+    inline void writeDebugLog(const std::string& message) override {
+      auto __result = _swiftPart.writeDebugLog(message);
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+    }
     inline std::optional<std::string> getDebugLogPath() override {
       auto __result = _swiftPart.getDebugLogPath();
       if (__result.hasError()) [[unlikely]] {

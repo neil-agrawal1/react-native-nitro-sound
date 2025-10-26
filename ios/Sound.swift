@@ -1878,6 +1878,10 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
         }
     }
 
+    public func writeDebugLog(message: String) throws {
+        FileLogger.shared.log(message)
+    }
+
     public func getDebugLogPath() throws -> String? {
         return FileLogger.shared.getCurrentLogPath()
     }

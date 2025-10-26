@@ -209,6 +209,10 @@ abstract class HybridSoundSpec: HybridObject() {
   
   @DoNotStrip
   @Keep
+  abstract fun writeDebugLog(message: String): Unit
+  
+  @DoNotStrip
+  @Keep
   abstract fun getDebugLogPath(): String?
   
   @DoNotStrip

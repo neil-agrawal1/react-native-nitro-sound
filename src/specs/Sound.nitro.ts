@@ -138,6 +138,7 @@ export interface Sound
   setManualSilenceCallback(callback: () => void): void;
 
   // Debug logging methods
+  writeDebugLog(message: string): void;
   getDebugLogPath(): string | null;
   getAllDebugLogPaths(): string[];
   readDebugLog(path?: string): string | null;

@@ -87,6 +87,7 @@ namespace margelo::nitro::sound {
     void setLogCallback(const std::function<void(const std::string& /* message */)>& callback) override;
     void setSegmentCallback(const std::function<void(const std::string& /* filename */, const std::string& /* filePath */, bool /* isManual */, double /* duration */)>& callback) override;
     void setManualSilenceCallback(const std::function<void()>& callback) override;
+    void writeDebugLog(const std::string& message) override;
     std::optional<std::string> getDebugLogPath() override;
     std::vector<std::string> getAllDebugLogPaths() override;
     std::optional<std::string> readDebugLog(const std::optional<std::string>& path) override;

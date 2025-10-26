@@ -48,6 +48,7 @@ namespace margelo::nitro::sound {
       prototype.registerHybridMethod("setLogCallback", &HybridSoundSpec::setLogCallback);
       prototype.registerHybridMethod("setSegmentCallback", &HybridSoundSpec::setSegmentCallback);
       prototype.registerHybridMethod("setManualSilenceCallback", &HybridSoundSpec::setManualSilenceCallback);
+      prototype.registerHybridMethod("writeDebugLog", &HybridSoundSpec::writeDebugLog);
       prototype.registerHybridMethod("getDebugLogPath", &HybridSoundSpec::getDebugLogPath);
       prototype.registerHybridMethod("getAllDebugLogPaths", &HybridSoundSpec::getAllDebugLogPaths);
       prototype.registerHybridMethod("readDebugLog", &HybridSoundSpec::readDebugLog);

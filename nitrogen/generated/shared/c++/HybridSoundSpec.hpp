@@ -95,6 +95,7 @@ namespace margelo::nitro::sound {
       virtual void setLogCallback(const std::function<void(const std::string& /* message */)>& callback) = 0;
       virtual void setSegmentCallback(const std::function<void(const std::string& /* filename */, const std::string& /* filePath */, bool /* isManual */, double /* duration */)>& callback) = 0;
       virtual void setManualSilenceCallback(const std::function<void()>& callback) = 0;
+      virtual void writeDebugLog(const std::string& message) = 0;
       virtual std::optional<std::string> getDebugLogPath() = 0;
       virtual std::vector<std::string> getAllDebugLogPaths() = 0;
       virtual std::optional<std::string> readDebugLog(const std::optional<std::string>& path) = 0;
