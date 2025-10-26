@@ -202,43 +202,25 @@ import FluidAudio
     }
 
     private func ensureEngineRunning() throws {
-        bridgedLog("───────────────────────────────────────────────────────")
-        bridgedLog("🔍 ENGINE STATUS CHECK")
-        bridgedLog("───────────────────────────────────────────────────────")
-
         guard let engine = audioEngine else {
-            bridgedLog("❌ ENGINE: Audio engine is nil - not initialized")
             throw RuntimeError.error(withMessage: "Audio engine not initialized")
         }
 
         if !engine.isRunning {
-            bridgedLog("⚠️ ENGINE: Audio engine STOPPED - attempting restart")
-            bridgedLog("───────────────────────────────────────────────────────")
-            bridgedLog("🔄 ENGINE RESTART STARTING")
-            bridgedLog("───────────────────────────────────────────────────────")
+            bridgedLog("⚠️ ENGINE: Restarting stopped engine")
             try restartAudioEngine()
-            bridgedLog("───────────────────────────────────────────────────────")
-            bridgedLog("✅ ENGINE RESTART COMPLETE")
-            bridgedLog("───────────────────────────────────────────────────────")
-        } else {
-            bridgedLog("✅ ENGINE: Already RUNNING - no action needed")
-            bridgedLog("───────────────────────────────────────────────────────")
         }
     }
 
     private func initializeAudioEngine() throws {
         guard !audioEngineInitialized else {
-            bridgedLog("ℹ️ ENGINE: Already initialized, skipping")
             return
         }
 
-        bridgedLog("═══════════════════════════════════════════════════════")
-        bridgedLog("🎬 ENGINE INITIALIZATION STARTING")
-        bridgedLog("═══════════════════════════════════════════════════════")
+        bridgedLog("🎬 ENGINE: Initializing")
 
         // Setup audio session ONCE for recording + playback
         let audioSession = AVAudioSession.sharedInstance()
-        bridgedLog("🎛️ ENGINE: Configuring audio session (playAndRecord, 44.1kHz)")
         try audioSession.setCategory(.playAndRecord,
                                     mode: .default,
                                     options: [.defaultToSpeaker, .allowBluetooth])
@@ -246,54 +228,43 @@ import FluidAudio
         // Only set mono input if hardware supports it
         if audioSession.maximumInputNumberOfChannels >= 1 {
             try? audioSession.setPreferredInputNumberOfChannels(1)
-            bridgedLog("🎤 ENGINE: Set input to mono")
         }
         try audioSession.setPreferredIOBufferDuration(0.0232) // ~23ms
         try audioSession.setActive(true)
-        bridgedLog("✅ ENGINE: Audio session activated")
 
         // Create the unified audio engine
         audioEngine = AVAudioEngine()
-        bridgedLog("🏗️ ENGINE: Created AVAudioEngine instance")
 
         // Create player nodes for crossfading support
         audioPlayerNodeA = AVAudioPlayerNode()
         audioPlayerNodeB = AVAudioPlayerNode()
         audioPlayerNodeC = AVAudioPlayerNode()
-        bridgedLog("🔊 ENGINE: Created 3 player nodes (A, B, C)")
 
         // Attach nodes to engine
         guard let engine = audioEngine,
             let playerA = audioPlayerNodeA,
             let playerB = audioPlayerNodeB,
             let playerC = audioPlayerNodeC else {
-            bridgedLog("❌ ENGINE: Failed to create audio engine components")
             throw RuntimeError.error(withMessage: "Failed to create audio engine components")
         }
 
         engine.attach(playerA)
         engine.attach(playerB)
         engine.attach(playerC)
-        bridgedLog("🔗 ENGINE: Attached player nodes to engine")
 
         // Connect player nodes to main mixer
         let mainMixer = engine.mainMixerNode
         engine.connect(playerA, to: mainMixer, format: nil)
         engine.connect(playerB, to: mainMixer, format: nil)
         engine.connect(playerC, to: mainMixer, format: nil)
-        bridgedLog("🔗 ENGINE: Connected all nodes to main mixer")
 
         // Force input node initialization by accessing it (required for .playAndRecord)
         let _ = engine.inputNode
-        bridgedLog("🎤 ENGINE: Input node initialized")
 
         // Now safe to start engine with both input and output configured
         try engine.start()
         audioEngineInitialized = true
-        bridgedLog("✅ ENGINE: Audio engine started successfully - READY FOR PLAYBACK/RECORDING")
-        bridgedLog("═══════════════════════════════════════════════════════")
-        bridgedLog("✅ ENGINE INITIALIZATION COMPLETE")
-        bridgedLog("═══════════════════════════════════════════════════════")
+        bridgedLog("✅ ENGINE: Initialized and running")
     }
 
 
@@ -357,7 +328,7 @@ import FluidAudio
     public func startRecorder() throws -> Promise<Void> {
         let promise = Promise<Void>()
 
-        bridgedLog("🎙️ RECORDING: startRecorder called")
+        bridgedLog("🎙️ RECORDING: Starting")
 
         // Return immediately and process in background
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
@@ -367,30 +338,24 @@ import FluidAudio
             }
 
             do {
-                // Initialize unified audio engine (this will set up the session if not already done)
-                self.bridgedLog("🎬 RECORDING: Initializing audio engine...")
                 try self.initializeAudioEngine()
-
-                // Request microphone permission
-                self.bridgedLog("🎤 RECORDING: Requesting microphone permission...")
                 let audioSession = AVAudioSession.sharedInstance()
 
                 audioSession.requestRecordPermission { [weak self] allowed in
                     guard let self = self else { return }
 
                     if allowed {
-                        self.bridgedLog("✅ RECORDING: Microphone permission granted")
                         DispatchQueue.global(qos: .userInitiated).async {
                             self.setupRecording(promise: promise)
                         }
                     } else {
-                        self.bridgedLog("❌ RECORDING: Microphone permission denied - check Settings > Dust > Microphone")
+                        self.bridgedLog("❌ RECORDING: Microphone permission denied")
                         promise.reject(withError: RuntimeError.error(withMessage: "Microphone permission denied. Please enable microphone access in Settings > Dust."))
                     }
                 }
 
             } catch {
-                self.bridgedLog("❌ RECORDING: Audio engine initialization failed: \(error.localizedDescription)")
+                self.bridgedLog("❌ RECORDING: Failed - \(error.localizedDescription)")
                 promise.reject(withError: RuntimeError.error(withMessage: "Audio engine initialization failed: \(error.localizedDescription)"))
             }
         }
@@ -832,80 +797,58 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
 
     private func setupRecording(promise: Promise<Void>) {
         do {
-            self.bridgedLog("🔧 RECORDING: setupRecording starting...")
-
             guard let engine = self.audioEngine else {
-                self.bridgedLog("❌ RECORDING: Audio engine is nil")
                 promise.reject(withError: RuntimeError.error(withMessage: "Unified audio engine not initialized"))
                 return
             }
 
-            // Engine should already be running from initialization
             if !engine.isRunning {
-                self.bridgedLog("❌ RECORDING: Audio engine is not running")
                 throw RuntimeError.error(withMessage: "Audio engine is not running")
             }
-            self.bridgedLog("✅ RECORDING: Audio engine is running")
 
             // Initialize session timestamp for unique filenames (milliseconds since epoch)
             self.sessionTimestamp = Int64(Date().timeIntervalSince1970 * 1000)
             self.segmentCounter = 0
-            self.bridgedLog("🆔 RECORDING: Session ID: \(self.sessionTimestamp)")
 
             let inputNode = engine.inputNode
-
-            // Query *real* hardware format after engine has started
-            let hwFormat = inputNode.outputFormat(forBus: 0)  // Use outputFormat, not inputFormat
-            self.bridgedLog("🎤 RECORDING: Hardware format: \(Int(hwFormat.sampleRate))Hz, \(hwFormat.channelCount) channels")
+            let hwFormat = inputNode.outputFormat(forBus: 0)
 
             // Create target format for VAD (16kHz mono)
-            // FluidAudio VAD requires 16kHz sample rate
             guard let target16kHzFormat = AVAudioFormat(
                 commonFormat: .pcmFormatFloat32,
-                sampleRate: 16000,  // Fixed at 16kHz for VAD
+                sampleRate: 16000,
                 channels: 1,
                 interleaved: false
             ) else {
-                self.bridgedLog("❌ RECORDING: Failed to create 16kHz target format")
                 throw RuntimeError.error(withMessage: "Failed to create 16kHz target format")
             }
 
             self.targetFormat = target16kHzFormat
-            self.bridgedLog("🎯 RECORDING: Target format: \(Int(target16kHzFormat.sampleRate))Hz, \(target16kHzFormat.channelCount) channels")
 
             // Create audio converter from hardware rate → 16kHz
             guard let converter = AVAudioConverter(from: hwFormat, to: target16kHzFormat) else {
-                self.bridgedLog("❌ RECORDING: Failed to create audio converter from \(Int(hwFormat.sampleRate))Hz to 16kHz")
                 throw RuntimeError.error(withMessage: "Failed to create audio converter from \(Int(hwFormat.sampleRate))Hz to 16kHz")
             }
             self.audioConverter = converter
-            self.bridgedLog("✅ RECORDING: Audio converter created (\(Int(hwFormat.sampleRate))Hz → 16kHz)")
 
             // Remove any existing taps
-            self.bridgedLog("🧹 RECORDING: Removing any existing mic taps...")
             inputNode.removeTap(onBus: 0)
-            self.bridgedLog("✅ RECORDING: Existing taps removed")
 
             // Init rolling buffer for pre-roll
             rollingBuffer = RollingAudioBuffer()
-            self.bridgedLog("📦 RECORDING: Rolling buffer initialized")
 
             // Set mode to idle FIRST (before VAD initialization)
             self.currentMode = .idle
-            self.bridgedLog("🔄 RECORDING: Mode set to IDLE (waiting for mode switch)")
 
             // Initialize VAD components asynchronously (non-blocking)
-            // Recording starts immediately; VAD becomes active when ready
-            self.bridgedLog("🎯 RECORDING: Initializing VAD (Voice Activity Detection)...")
             Task {
                 do {
                     let vadConfig = VadConfig(threshold: self.vadThreshold)
                     self.vadManager = try await VadManager(config: vadConfig)
                     self.vadStreamState = VadStreamState.initial()
-                    self.bridgedLog("✅ RECORDING: VAD initialized (threshold: \(self.vadThreshold), sample rate: 16kHz)")
+                    self.bridgedLog("✅ VAD initialized")
                 } catch {
-                    self.bridgedLog("⚠️ RECORDING: VAD initialization failed: \(error.localizedDescription)")
-                    self.bridgedLog("⚠️ RECORDING: Falling back to RMS detection")
+                    self.bridgedLog("⚠️ VAD init failed, using fallback")
                 }
             }
 
@@ -913,11 +856,9 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
             if outputDirectory == nil {
                 let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
                 outputDirectory = documentsURL.appendingPathComponent("speech_segments")
-                self.bridgedLog("📁 RECORDING: Output directory: \(outputDirectory?.path ?? "nil")")
             }
             if let outputDir = outputDirectory {
                 try FileManager.default.createDirectory(at: outputDir, withIntermediateDirectories: true)
-                self.bridgedLog("✅ RECORDING: Output directory created")
             }
 
             // Install tap using HARDWARE format (not 16kHz)
@@ -929,21 +870,11 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
 
                 // Convert buffer from hardware rate (48kHz) to 16kHz for VAD
                 guard let converted16kHzBuffer = self.convertTo16kHz(buffer) else {
-                    self.bridgedLog("⚠️ Failed to convert buffer, skipping frame")
                     return
                 }
 
                 // VAD-based speech detection - ONLY when needed
                 var audioIsLoud = false
-
-                // Log VAD status once at the start
-                if self.tapFrameCounter == 1 {
-                    let vadInitialized = (self.vadManager != nil && self.vadStreamState != nil)
-                    self.bridgedLog("🎙️ TAP CALLBACK STARTED")
-                    self.bridgedLog("   - Mode: \(self.currentMode)")
-                    self.bridgedLog("   - VAD initialized: \(vadInitialized)")
-                    self.bridgedLog("   - VAD threshold: \(self.vadThreshold)")
-                }
 
                 // Only compute VAD if we're in a mode that needs it
                 if self.currentMode == .autoVAD || self.currentMode == .manual {
@@ -972,8 +903,7 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                                     self.vadStreamState = streamResult.state
 
                                 } catch {
-                                    // VAD processing error - state stays at previous value
-                                    self.bridgedLog("⚠️ VAD processing error: \(error.localizedDescription)")
+                                    // VAD processing error - state stays at previous value (silent fail)
                                 }
                             }
 
@@ -1098,16 +1028,16 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                     do {
                         try segmentFile.write(from: converted16kHzBuffer)
                     } catch {
-                        self.bridgedLog("❌ Failed to write buffer: \(error.localizedDescription)")
+                        // Silent fail to avoid log spam
                     }
                 }
             }
 
-            self.bridgedLog("✅ RECORDING: Mic tap installed successfully - RECORDING ACTIVE")
+            self.bridgedLog("✅ RECORDING: Active")
             promise.resolve(withResult: ())
 
         } catch {
-            bridgedLog("❌ RECORDING: Recording setup failed: \(error.localizedDescription)")
+            bridgedLog("❌ RECORDING: Setup failed - \(error.localizedDescription)")
             promise.reject(withError: RuntimeError.error(withMessage: "Recording setup failed: \(error.localizedDescription)"))
         }
     }
@@ -1345,14 +1275,7 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
     public func startPlayer(uri: String?, httpHeaders: Dictionary<String, String>?) throws -> Promise<String> {
         let promise = Promise<String>()
 
-        bridgedLog("═══════════════════════════════════════════════════════")
-        bridgedLog("▶️ PLAYBACK START REQUESTED")
-        bridgedLog("═══════════════════════════════════════════════════════")
-        if let uri = uri {
-            bridgedLog("📁 PLAYBACK: URI = \(uri)")
-        } else {
-            bridgedLog("⚠️ PLAYBACK: URI is nil")
-        }
+        bridgedLog("▶️ PLAYBACK: Starting - \(uri ?? "nil")")
 
         // Return immediately and process in background
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
@@ -1362,87 +1285,49 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
             }
 
             do {
-                // Initialize unified audio engine (will only initialize once)
-                bridgedLog("🎬 PLAYBACK: Initializing audio engine...")
                 try self.initializeAudioEngine()
-
-                // Ensure engine is running
-                bridgedLog("🔍 PLAYBACK: Checking if engine is running...")
                 try self.ensureEngineRunning()
 
                 guard let uri = uri, !uri.isEmpty else {
-                    self.bridgedLog("❌ PLAYBACK: URI is nil or empty")
+                    self.bridgedLog("❌ PLAYBACK: No URI provided")
                     promise.reject(withError: RuntimeError.error(withMessage: "URI is required for playback"))
                     return
                 }
 
-                // Store URI for potential looping
                 self.currentPlaybackURI = uri
-                self.bridgedLog("💾 PLAYBACK: Stored URI for potential looping")
 
                 // Handle all URLs the same way with AVAudioFile
                 let url: URL
                 if uri.hasPrefix("http") {
-                    self.bridgedLog("🌐 PLAYBACK: HTTP URL detected")
                     url = URL(string: uri)!
                 } else if uri.hasPrefix("file://") {
-                    self.bridgedLog("📁 PLAYBACK: file:// URL detected")
                     url = URL(string: uri)!
                 } else {
-                    self.bridgedLog("📁 PLAYBACK: File path detected")
                     url = URL(fileURLWithPath: uri)
                 }
 
-                self.bridgedLog("🔍 PLAYBACK: Resolved URL path: \(url.path)")
-                self.bridgedLog("📄 PLAYBACK: File name: \(url.lastPathComponent)")
-
                 // For local files, check if file exists
                 if !uri.hasPrefix("http") {
-                    self.bridgedLog("🔍 PLAYBACK: Checking if file exists...")
                     if !FileManager.default.fileExists(atPath: url.path) {
-                        self.bridgedLog("❌ PLAYBACK: File does NOT exist at path: \(url.path)")
+                        self.bridgedLog("❌ PLAYBACK: File not found - \(url.lastPathComponent)")
                         promise.reject(withError: RuntimeError.error(withMessage: "Audio file does not exist at path: \(uri)"))
                         return
-                    }
-                    self.bridgedLog("✅ PLAYBACK: File exists at path")
-
-                    // Get file size for diagnostics
-                    if let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
-                       let fileSize = attributes[.size] as? UInt64 {
-                        self.bridgedLog("📊 PLAYBACK: File size: \(fileSize) bytes")
                     }
                 }
 
                 // Load the audio file
-                self.bridgedLog("📂 PLAYBACK: Loading audio file into AVAudioFile...")
                 let audioFile: AVAudioFile
                 if uri.hasPrefix("http") {
-                    // For HTTP URLs, download the data first (temporary solution)
-                    // TODO: Implement proper streaming
-                    self.bridgedLog("⬇️ PLAYBACK: Downloading HTTP audio...")
                     let data = try Data(contentsOf: url)
                     let tempURL = FileManager.default.temporaryDirectory
                         .appendingPathComponent("temp_audio_\(UUID().uuidString).m4a")
                     try data.write(to: tempURL)
                     audioFile = try AVAudioFile(forReading: tempURL)
-                    self.bridgedLog("✅ PLAYBACK: HTTP audio downloaded and loaded")
                 } else {
                     audioFile = try AVAudioFile(forReading: url)
-                    self.bridgedLog("✅ PLAYBACK: Audio file loaded successfully")
                 }
 
                 self.currentAudioFile = audioFile
-
-                // Diagnostic logging for M4A playback debugging
-                self.bridgedLog("📊 AUDIO FILE DIAGNOSTICS:")
-                self.bridgedLog("  📁 File: \(url.lastPathComponent)")
-                self.bridgedLog("  📏 Frame count: \(audioFile.length) frames")
-                self.bridgedLog("  🎵 File format rate: \(audioFile.fileFormat.sampleRate) Hz")
-                self.bridgedLog("  ⚙️ Processing format rate: \(audioFile.processingFormat.sampleRate) Hz")
-                let fileDuration = Double(audioFile.length) / audioFile.fileFormat.sampleRate
-                let processingDuration = Double(audioFile.length) / audioFile.processingFormat.sampleRate
-                self.bridgedLog("  ⏱️ Duration (file rate): \(String(format: "%.2f", fileDuration))s")
-                self.bridgedLog("  ⏱️ Duration (processing rate): \(String(format: "%.2f", processingDuration))s")
 
                 // Reset starting frame offset (playing from beginning)
                 self.startingFrameOffset = 0
@@ -1493,11 +1378,8 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                     self.didEmitPlaybackEnd = false
                     self.startPlayTimer()
 
-                    self.bridgedLog("▶️ PLAYBACK: Calling playerNode.play() - STARTING PLAYBACK NOW")
                     playerNode.play()
-                    self.bridgedLog("═══════════════════════════════════════════════════════")
-                    self.bridgedLog("✅ PLAYBACK ACTIVE - AUDIO IS NOW PLAYING")
-                    self.bridgedLog("═══════════════════════════════════════════════════════")
+                    self.bridgedLog("✅ PLAYBACK: Started - \(url.lastPathComponent)")
 
                     promise.resolve(withResult: uri)
                 }
