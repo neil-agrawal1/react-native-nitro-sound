@@ -68,7 +68,17 @@ class FileLogger {
     /// Write log message to file
     func log(_ message: String) {
         logQueue.async { [weak self] in
-            self?.writeToFile(message)
+            guard let self = self else { return }
+
+            // Wait for file handle to be ready (setup runs async on first access)
+            // This prevents early logs from being lost during initialization
+            var attempts = 0
+            while self.logFileHandle == nil && attempts < 50 {
+                Thread.sleep(forTimeInterval: 0.01) // Wait 10ms per attempt (max 500ms total)
+                attempts += 1
+            }
+
+            self.writeToFile(message)
         }
     }
 
