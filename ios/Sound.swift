@@ -48,7 +48,7 @@ import Speech
 
     // Seamless looping with crossfade
     private var loopCrossfadeTimer: DispatchSourceTimer?
-    private var loopCrossfadeDuration: TimeInterval = 0.020  // 20ms crossfade
+    private var loopCrossfadeDuration: TimeInterval = 0.200  // 200ms crossfade (masks audio engine buffer latency)
     private var isLoopCrossfadeActive: Bool = false
     private var playbackVolume: Float = 1.0  // Track desired playback volume for crossfades
 
@@ -584,10 +584,14 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
         let isManual = currentSegmentIsManual
         let modeType = isManual ? "MANUAL" : "AUTO"
         bridgedLog("🎙️ Started \(modeType) segment: \(filename) in mode: \(currentMode)")
-        bridgedLog("📂 File path: \(fileURL.path)")
         bridgedLog("🎚️ Audio format: \(tapFormat.sampleRate)Hz, \(tapFormat.channelCount) channels")
         if isManual {
             bridgedLog("⏱️ Manual segment silence timeout: \(Double(manualSilenceThreshold) / 14.0) seconds")
+        }
+
+        // Log VAD state when segment starts
+        if !isManual, let vadState = vadStreamState {
+            bridgedLog("🎤 Segment start - VAD triggered: \(vadState.triggered)")
         }
 
         // Pre-roll: flush ~3s of buffered audio into AUTO segments only
@@ -637,7 +641,6 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
 
         bridgedLog("🛑 Segment closed (callback will fire after processing)")
         bridgedLog("   - Filename: \(filename)")
-        bridgedLog("   - Relative path: \(filePath)")
         bridgedLog("   - Is manual: \(isManual)")
 
         return (filename: filename, filePath: filePath, fileURL: fileURL, isManual: isManual)
@@ -699,45 +702,55 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
         currentSegmentFile = nil
         segmentStartTime = nil  // Reset start time
 
-        // Calculate ACTUAL duration from the audio file (not timestamps)
-        var duration: Double = 0
-        var durationString = "unknown"
-        var fileSize: UInt64 = 0
-        var frameCount: AVAudioFramePosition = 0
+        // Wait for file system to flush before reading (fixes duration = 0 bug)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+            guard let self = self else { return }
 
-        do {
-            let audioFile = try AVAudioFile(forReading: fileURL)
-            frameCount = audioFile.length
-            let sampleRate = audioFile.processingFormat.sampleRate
-            duration = Double(frameCount) / sampleRate
-            durationString = String(format: "%.1f seconds", duration)
+            // Calculate ACTUAL duration from the audio file (not timestamps)
+            var duration: Double = 0
+            var durationString = "unknown"
+            var fileSize: UInt64 = 0
+            var frameCount: AVAudioFramePosition = 0
 
-            // Get file size
-            let attributes = try FileManager.default.attributesOfItem(atPath: fileURL.path)
-            fileSize = attributes[.size] as? UInt64 ?? 0
+            do {
+                let audioFile = try AVAudioFile(forReading: fileURL)
+                frameCount = audioFile.length
+                let sampleRate = audioFile.processingFormat.sampleRate
+                duration = Double(frameCount) / sampleRate
+                durationString = String(format: "%.1f seconds", duration)
 
-            bridgedLog("📊 Audio file stats:")
-            bridgedLog("   - Frames: \(frameCount)")
-            bridgedLog("   - Sample rate: \(sampleRate)Hz")
-            bridgedLog("   - Calculated duration: \(duration)s")
-            bridgedLog("   - File size: \(fileSize) bytes")
-        } catch {
-            bridgedLog("⚠️ Could not read audio file duration: \(error.localizedDescription)")
+                // Get file size
+                let attributes = try FileManager.default.attributesOfItem(atPath: fileURL.path)
+                fileSize = attributes[.size] as? UInt64 ?? 0
+
+                self.bridgedLog("📊 Audio file stats:")
+                self.bridgedLog("   - Frames: \(frameCount)")
+                self.bridgedLog("   - Sample rate: \(sampleRate)Hz")
+                self.bridgedLog("   - Calculated duration: \(duration)s")
+                self.bridgedLog("   - File size: \(fileSize) bytes")
+            } catch {
+                self.bridgedLog("⚠️ Could not read audio file duration: \(error.localizedDescription)")
+            }
+
+            // Notify JavaScript
+            self.bridgedLog("🛑 Ended \(modeType) segment: \(filename) (duration: \(durationString))")
+            self.bridgedLog("📤 Calling callback - isManual: \(isManual), duration: \(duration)s (SECONDS)")
+
+            // Log VAD state when segment ends
+            if !isManual, let vadState = self.vadStreamState {
+                self.bridgedLog("🎤 Segment end - VAD triggered: \(vadState.triggered)")
+            }
+
+            // Notify JavaScript via callback
+            if let callback = self.segmentCallback {
+                callback(filename, filePath, isManual, duration)
+                self.bridgedLog("✅ Callback fired for \(filename)")
+            } else {
+                self.bridgedLog("⚠️ No callback set for segment")
+            }
+
+            self.silenceCounter = 0
         }
-
-        // Notify JavaScript
-        bridgedLog("🛑 Ended \(modeType) segment: \(filename) (duration: \(durationString))")
-        bridgedLog("📤 Calling callback with relativePath: \(filePath), isManual: \(isManual), duration: \(duration)s (SECONDS)")
-
-        // Notify JavaScript via callback
-        if let callback = self.segmentCallback {
-            callback(filename, filePath, self.currentSegmentIsManual, duration)
-            bridgedLog("✅ Callback fired for \(filename)")
-        } else {
-            bridgedLog("⚠️ No callback set for segment")
-        }
-
-        silenceCounter = 0
     }
 
     private func setupRecording(promise: Promise<Void>) {
@@ -856,14 +869,14 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                             audioIsLoud = vadState.triggered
 
                             // Log VAD state periodically
-                            if self.tapFrameCounter % 100 == 0 {
-                                self.bridgedLog("🎤 Frame \(self.tapFrameCounter): VAD triggered = \(vadState.triggered)")
-                            }
+                            // if self.tapFrameCounter % 100 == 0 {
+                            //     self.bridgedLog("🎤 Frame \(self.tapFrameCounter): VAD triggered = \(vadState.triggered)")
+                            // }
                         } else {
                             // Buffer data is invalid - log and skip VAD for this frame
-                            if self.tapFrameCounter % 100 == 0 {
-                                self.bridgedLog("⚠️ Frame \(self.tapFrameCounter): Invalid floatChannelData, skipping VAD (audioIsLoud stays false)")
-                            }
+                            // if self.tapFrameCounter % 100 == 0 {
+                            //     self.bridgedLog("⚠️ Frame \(self.tapFrameCounter): Invalid floatChannelData, skipping VAD (audioIsLoud stays false)")
+                            // }
                             // audioIsLoud stays false - continue with normal buffer writing below
                         }
 
@@ -878,9 +891,9 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                     }
 
                     // Log final audioIsLoud value periodically
-                    if self.tapFrameCounter % 100 == 0 {
-                        self.bridgedLog("🔊 Frame \(self.tapFrameCounter): audioIsLoud = \(audioIsLoud)")
-                    }
+                    // if self.tapFrameCounter % 100 == 0 {
+                    //     self.bridgedLog("🔊 Frame \(self.tapFrameCounter): audioIsLoud = \(audioIsLoud)")
+                    // }
                 }
                 // In idle mode, audioIsLoud stays false - no processing
 
@@ -1220,8 +1233,6 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
     public func startPlayer(uri: String?, httpHeaders: Dictionary<String, String>?) throws -> Promise<String> {
         let promise = Promise<String>()
 
-        bridgedLog("▶️ PLAYBACK: Starting - \(uri ?? "nil")")
-
         // Return immediately and process in background
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else {
@@ -1324,7 +1335,6 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                     self.startPlayTimer()
 
                     playerNode.play()
-                    self.bridgedLog("✅ PLAYBACK: Started - \(url.lastPathComponent)")
 
                     promise.resolve(withResult: uri)
                 }
@@ -1406,7 +1416,6 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
         self.bridgedLog("🔄 Crossfading loop: \(self.activePlayer == .playerA ? "B→A" : "A→B")")
         self.bridgedLog("   Old node isPlaying: \(oldNode.isPlaying), volume: \(oldNode.volume)")
         self.bridgedLog("   New node isPlaying: \(newNode.isPlaying), volume: \(newNode.volume)")
-        self.bridgedLog("   File: \(url.lastPathComponent)")
         self.bridgedLog("   Duration: \(String(format: "%.2f", Double(audioFile.length) / audioFile.fileFormat.sampleRate))s")
 
         // Prepare new node
@@ -1877,7 +1886,7 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                 promise.reject(withError: RuntimeError.error(withMessage: "Speech recognizer unavailable"))
                 return
             }
-            
+
             guard recognizer.isAvailable else {
                 promise.reject(withError: RuntimeError.error(withMessage: "Speech recognizer not available"))
                 return
@@ -1890,18 +1899,20 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
             }
             
             guard let url = URL(string: urlPath) else {
-                promise.reject(withError: RuntimeError.error(withMessage: "Invalid file path: \(filePath)"))
+                self.bridgedLog("ℹ️ Invalid file path: \(filePath)")
+                promise.resolve(withResult: "No Speech Detected")
                 return
             }
-            
+
             // Check file exists
             if !FileManager.default.fileExists(atPath: url.path) {
-                promise.reject(withError: RuntimeError.error(withMessage: "Audio file not found: \(url.path)"))
+                self.bridgedLog("ℹ️ Audio file not found: \(url.path)")
+                promise.resolve(withResult: "No Speech Detected")
                 return
             }
-            
-            self.bridgedLog("🎤 Starting file transcription: \(url.lastPathComponent)")
-            
+
+            self.bridgedLog("🎤 Starting file transcription")
+
             // Create recognition request
             let request = SFSpeechURLRecognitionRequest(url: url)
             request.shouldReportPartialResults = false
@@ -1909,20 +1920,30 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
             // Start recognition task
             recognizer.recognitionTask(with: request) { result, error in
                 if let error = error {
-                    self.bridgedLog("❌ Transcription error: \(error.localizedDescription)")
-                    promise.reject(withError: error)
+                    self.bridgedLog("ℹ️ Transcription failed: \(error.localizedDescription)")
+                    promise.resolve(withResult: "No Speech Detected")
                     return
                 }
-                
+
                 if let result = result, result.isFinal {
                     let transcription = result.bestTranscription.formattedString
-                    self.bridgedLog("✅ Transcription complete: \(transcription.prefix(100))...")
-                    promise.resolve(withResult: transcription)  // ← Fixed
+                    if transcription.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        self.bridgedLog("ℹ️ No speech detected in audio")
+                        promise.resolve(withResult: "No Speech Detected")
+                    } else {
+                        self.bridgedLog("✅ Transcription complete: \(transcription.prefix(100))...")
+                        promise.resolve(withResult: transcription)
+                    }
                 } else if let result = result {
-                    promise.resolve(withResult: result.bestTranscription.formattedString)  // ← Fixed
+                    let transcription = result.bestTranscription.formattedString
+                    if transcription.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        promise.resolve(withResult: "No Speech Detected")
+                    } else {
+                        promise.resolve(withResult: transcription)
+                    }
                 } else {
-                    self.bridgedLog("⚠️ Transcription returned no result")
-                    promise.resolve(withResult: "")  // ← Fixed
+                    self.bridgedLog("ℹ️ No speech detected in audio")
+                    promise.resolve(withResult: "No Speech Detected")
                 }
             }
         }
@@ -2277,6 +2298,11 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
 
                 // Check if playback has finished (ALWAYS check, even if no playBackListener)
                 if !playerNode.isPlaying {
+                    // GUARD: Prevent infinite logging if we've already handled playback end
+                    guard !self.didEmitPlaybackEnd else {
+                        return
+                    }
+
                     // Get position when timer detected stop
                     var stopPos: Double = 0
                     if let nodeTime = playerNode.lastRenderTime,
