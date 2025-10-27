@@ -1424,6 +1424,8 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
         timer.setEventHandler { [weak self] in
             guard let self = self else { return }
 
+            self.bridgedLog("⏰ Loop timer fired!")
+
             // Check if looping is still enabled
             guard self.shouldLoopPlayback else {
                 self.bridgedLog("🛑 Loop disabled, stopping crossfade timer")
@@ -1438,7 +1440,10 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
     }
 
     private func triggerSeamlessLoopCrossfade(audioFile: AVAudioFile, url: URL) {
-        guard self.shouldLoopPlayback, !self.isLoopCrossfadeActive else { return }
+        guard self.shouldLoopPlayback, !self.isLoopCrossfadeActive else {
+            self.bridgedLog("⚠️ Seamless crossfade skipped - looping:\(self.shouldLoopPlayback) active:\(self.isLoopCrossfadeActive)")
+            return
+        }
 
         self.isLoopCrossfadeActive = true
 
@@ -1455,32 +1460,49 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
         }
 
         self.bridgedLog("🔄 Crossfading loop: \(self.activePlayer == .playerA ? "B→A" : "A→B")")
+        self.bridgedLog("   Old node isPlaying: \(oldNode.isPlaying), volume: \(oldNode.volume)")
+        self.bridgedLog("   New node isPlaying: \(newNode.isPlaying), volume: \(newNode.volume)")
+        self.bridgedLog("   File: \(url.lastPathComponent)")
+        self.bridgedLog("   Duration: \(String(format: "%.2f", Double(audioFile.length) / audioFile.fileFormat.sampleRate))s")
 
         // Prepare new node
+        self.bridgedLog("   📋 Stopping and resetting new node...")
         newNode.stop()
         newNode.reset()
         newNode.volume = 0.0
+
+        self.bridgedLog("   📋 Scheduling file on new node...")
         newNode.scheduleFile(audioFile, at: nil, completionHandler: nil)
+
+        self.bridgedLog("   ▶️ Starting playback on new node...")
         newNode.play()
+
+        self.bridgedLog("   New node isPlaying after play(): \(newNode.isPlaying)")
 
         // Schedule next crossfade IMMEDIATELY (before crossfade completes)
         // This ensures timing is relative to when playback STARTED, not when fade finishes
         let totalDuration = Double(audioFile.length) / audioFile.fileFormat.sampleRate
         let crossfadeStartTime = max(0, totalDuration - self.loopCrossfadeDuration)
+        self.bridgedLog("   ⏰ Next crossfade scheduled in \(String(format: "%.3f", crossfadeStartTime))s")
         self.scheduleLoopCrossfade(after: crossfadeStartTime, audioFile: audioFile, url: url)
 
         // Crossfade (20ms) - respect current playback volume
+        self.bridgedLog("   🎚️ Starting fade out (old): \(self.playbackVolume) → 0.0 over \(String(format: "%.3f", self.loopCrossfadeDuration))s")
         self.fadeVolume(node: oldNode, from: self.playbackVolume, to: 0.0, duration: self.loopCrossfadeDuration) {
+            self.bridgedLog("   ✅ Fade out complete, stopping old node")
             oldNode.stop()
             oldNode.reset()
         }
 
+        self.bridgedLog("   🎚️ Starting fade in (new): 0.0 → \(self.playbackVolume) over \(String(format: "%.3f", self.loopCrossfadeDuration))s")
         self.fadeVolume(node: newNode, from: 0.0, to: self.playbackVolume, duration: self.loopCrossfadeDuration) { [weak self] in
             guard let self = self else { return }
 
+            self.bridgedLog("   ✅ Fade in complete")
             // Update current player reference and reset flag
             self.currentPlayerNode = newNode
             self.isLoopCrossfadeActive = false
+            self.bridgedLog("   🏁 Seamless crossfade cycle complete")
         }
     }
 
