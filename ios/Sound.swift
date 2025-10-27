@@ -381,9 +381,7 @@ import Speech
     // MARK: - File Writing Methods
 
     private func trimLastSeconds(_ seconds: Double, fromFileAt url: URL) throws {
-        bridgedLog("✂️ trimLastSeconds called:")
-        bridgedLog("   - File: \(url.lastPathComponent)")
-        bridgedLog("   - Seconds to trim: \(seconds)s")
+        guard seconds > 0 else { return }
 
         // Read the original file
         let originalFile = try AVAudioFile(forReading: url)
@@ -392,16 +390,9 @@ import Speech
         let totalFrames = originalFile.length
         let originalDuration = Double(totalFrames) / sampleRate
 
-        bridgedLog("   - Original frames: \(totalFrames)")
-        bridgedLog("   - Original duration: \(String(format: "%.2f", originalDuration))s")
-        bridgedLog("   - Sample rate: \(sampleRate)Hz")
-
         // Calculate frames to keep (remove last N seconds)
         let framesToRemove = AVAudioFramePosition(seconds * sampleRate)
         let framesToKeep = max(0, totalFrames - framesToRemove)
-
-        bridgedLog("   - Frames to remove: \(framesToRemove)")
-        bridgedLog("   - Frames to keep: \(framesToKeep)")
 
         guard framesToKeep > 0 else {
             bridgedLog("⚠️ Trim would remove entire file, skipping")
@@ -434,33 +425,17 @@ import Speech
         try FileManager.default.moveItem(at: tempURL, to: url)
 
         let trimmedDuration = Double(framesToKeep) / sampleRate
-
-        // Get final file size
-        let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
-        let finalFileSize = attributes[.size] as? UInt64 ?? 0
-
-        bridgedLog("✅ Trim complete:")
-        bridgedLog("   - New duration: \(String(format: "%.2f", trimmedDuration))s")
-        bridgedLog("   - New file size: \(finalFileSize) bytes")
-        bridgedLog("   - Removed: \(String(format: "%.2f", seconds))s / \(framesToRemove) frames")
+        bridgedLog("✂️ Trimmed \(String(format: "%.1f", seconds))s → \(String(format: "%.1f", trimmedDuration))s")
     }
 
     private func resampleRecording(fileURL: URL) throws {
-        bridgedLog("🔄 resampleRecording called:")
-        bridgedLog("   - File: \(fileURL.lastPathComponent)")
-
         // Read the original 16kHz file
         let sourceFile = try AVAudioFile(forReading: fileURL)
         let sourceFormat = sourceFile.processingFormat
         let sourceSampleRate = sourceFormat.sampleRate
 
-        bridgedLog("   - Source sample rate: \(Int(sourceSampleRate))Hz")
-        bridgedLog("   - Source frames: \(sourceFile.length)")
-        bridgedLog("   - Source duration: \(String(format: "%.2f", Double(sourceFile.length) / sourceSampleRate))s")
-
         // Only resample if source is 16kHz (don't resample if already 44.1kHz)
         guard sourceSampleRate == 16000 else {
-            bridgedLog("   ℹ️ File is already at \(Int(sourceSampleRate))Hz, skipping resample")
             return
         }
 
@@ -478,9 +453,6 @@ import Speech
         guard let converter = AVAudioConverter(from: sourceFormat, to: outputFormat) else {
             throw RuntimeError.error(withMessage: "Failed to create audio converter for resampling")
         }
-
-        bridgedLog("   - Target sample rate: 44100Hz")
-        bridgedLog("   - Creating converter: \(Int(sourceSampleRate))Hz → 44100Hz")
 
         // Create temporary output file
         let tempURL = fileURL.deletingLastPathComponent()
@@ -545,7 +517,6 @@ import Speech
 
         // Flush the converter to get any remaining buffered samples
         // This is critical when upsampling - the converter buffers samples for interpolation
-        bridgedLog("   - Flushing converter buffer...")
         var flushedFrames: AVAudioFramePosition = 0
         var flushIterations = 0
         while true {
@@ -559,7 +530,7 @@ import Speech
             let status = converter.convert(to: outputBuffer, error: &error, withInputFrom: inputBlock)
 
             if let error = error {
-                bridgedLog("   ⚠️ Flush error: \(error.localizedDescription)")
+                bridgedLog("⚠️ Flush error: \(error.localizedDescription)")
                 break
             }
 
@@ -576,32 +547,17 @@ import Speech
 
             // Safety check - prevent infinite loop
             if flushIterations > 10 {
-                bridgedLog("   ⚠️ Flush safety limit reached")
+                bridgedLog("⚠️ Flush safety limit reached")
                 break
             }
         }
-
-        if flushedFrames > 0 {
-            let flushedDuration = Double(flushedFrames) / outputFormat.sampleRate
-            bridgedLog("   ✅ Flushed \(flushedFrames) frames (\(String(format: "%.3f", flushedDuration))s)")
-        }
-
-        let outputDuration = Double(totalFramesConverted) / outputFormat.sampleRate
-        bridgedLog("   - Total converted frames: \(totalFramesConverted)")
-        bridgedLog("   - Total output duration: \(String(format: "%.2f", outputDuration))s")
 
         // Replace original file with resampled version
         try FileManager.default.removeItem(at: fileURL)
         try FileManager.default.moveItem(at: tempURL, to: fileURL)
 
-        // Get final file size
-        let attributes = try FileManager.default.attributesOfItem(atPath: fileURL.path)
-        let finalFileSize = attributes[.size] as? UInt64 ?? 0
-
-        bridgedLog("✅ Resample complete:")
-        bridgedLog("   - New sample rate: 44100Hz")
-        bridgedLog("   - New file size: \(finalFileSize) bytes")
-        bridgedLog("   - Ratio: \(String(format: "%.2f", sampleRateRatio))x")
+        let outputDuration = Double(totalFramesConverted) / outputFormat.sampleRate
+        bridgedLog("🔄 Resampled 16kHz → 44.1kHz (\(String(format: "%.1f", outputDuration))s)")
     }
 
         // Replace your existing startNewSegment() with this version:
@@ -691,22 +647,17 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
     /// Use this for ALL manual segments to ensure proper playback speed
     private func processAndFireSegmentCallback(metadata: (filename: String, filePath: String, fileURL: URL, isManual: Bool), trimSeconds: Double) {
         // Trim silence from the end
-        bridgedLog("✂️ Starting trim of last \(String(format: "%.1f", trimSeconds)) seconds from file...")
         do {
             try self.trimLastSeconds(trimSeconds, fromFileAt: metadata.fileURL)
-            bridgedLog("✅ Trim completed successfully")
         } catch {
-            bridgedLog("⚠️ Failed to trim silence but continuing: \(error.localizedDescription)")
+            bridgedLog("⚠️ Failed to trim silence: \(error.localizedDescription)")
         }
 
         // Resample 16kHz to 44.1kHz for correct playback speed
-        bridgedLog("🔄 Starting resample to 44.1kHz...")
         do {
             try self.resampleRecording(fileURL: metadata.fileURL)
-            bridgedLog("✅ Resample completed successfully")
         } catch {
-            bridgedLog("⚠️ Resampling failed but continuing: \(error.localizedDescription)")
-            bridgedLog("   File will be stored at original sample rate (may play at wrong speed)")
+            bridgedLog("⚠️ Resampling failed: \(error.localizedDescription)")
         }
 
         // Read the actual processed file duration
@@ -714,21 +665,14 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
         do {
             let processedFile = try AVAudioFile(forReading: metadata.fileURL)
             actualDuration = Double(processedFile.length) / processedFile.processingFormat.sampleRate
-
-            bridgedLog("📊 Final processed file stats:")
-            bridgedLog("   - Frames: \(processedFile.length)")
-            bridgedLog("   - Sample rate: \(processedFile.processingFormat.sampleRate)Hz")
-            bridgedLog("   - Actual duration: \(String(format: "%.2f", actualDuration))s")
         } catch {
-            bridgedLog("❌ Failed to read processed file: \(error.localizedDescription)")
-            bridgedLog("   Callback will fire with 0 duration")
+            bridgedLog("⚠️ Failed to read processed file: \(error.localizedDescription)")
         }
 
         // Fire callback with processed file info
-        bridgedLog("📤 Calling callback with relativePath: \(metadata.filePath), isManual: \(metadata.isManual), duration: \(actualDuration)s")
         if let callback = self.segmentCallback {
             callback(metadata.filename, metadata.filePath, metadata.isManual, actualDuration)
-            bridgedLog("✅ Callback fired for \(metadata.filename)")
+            bridgedLog("✅ Segment ready: \(metadata.filename) (\(String(format: "%.1f", actualDuration))s)")
         } else {
             bridgedLog("⚠️ No callback set for segment")
         }
