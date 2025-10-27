@@ -81,7 +81,7 @@ import Speech
     // VAD properties
     private var vadManager: VadManager?
     private var vadStreamState: VadStreamState?
-    private var vadThreshold: Float = 0.4  // 40% confidence (lower = more sensitive)
+    private var vadThreshold: Float = 0.2  // 20% confidence (lower = more sensitive)
 
     // Audio format conversion (48kHz → 16kHz for VAD)
     private var audioConverter: AVAudioConverter?
@@ -819,10 +819,10 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                             // Use triggered state from most recent VAD result
                             audioIsLoud = vadState.triggered
 
-                            // Log VAD state periodically
-                            // if self.tapFrameCounter % 100 == 0 {
-                            //     self.bridgedLog("🎤 Frame \(self.tapFrameCounter): VAD triggered = \(vadState.triggered)")
-                            // }
+                            // Log VAD state periodically (every 50 frames in manual mode to debug silence issues)
+                            if self.currentMode == .manual && self.tapFrameCounter % 50 == 0 {
+                                self.bridgedLog("🎤 Frame \(self.tapFrameCounter): VAD triggered = \(vadState.triggered), threshold = \(self.vadThreshold)")
+                            }
                         } else {
                             // Buffer data is invalid - log and skip VAD for this frame
                             // if self.tapFrameCounter % 100 == 0 {
@@ -883,13 +883,24 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                     if audioIsLoud {
                         // Reset silence counter on speech
                         if self.manualSilenceFrameCount > 0 {
+                            let elapsedSeconds = Double(self.manualSilenceFrameCount) / 14.0
+                            self.bridgedLog("🔊 SPEECH DETECTED - resetting silence counter (was at \(self.manualSilenceFrameCount) frames / \(String(format: "%.1f", elapsedSeconds))s)")
                             self.manualSilenceFrameCount = 0
                         }
                     } else {
                         // Increment silence counter
                         self.manualSilenceFrameCount += 1
 
+                        // Log every 50 frames (~3.5s at 14fps) to track progress
+                        if self.manualSilenceFrameCount % 50 == 0 {
+                            let thresholdSeconds = Double(self.manualSilenceThreshold) / 14.0
+                            let elapsedSeconds = Double(self.manualSilenceFrameCount) / 14.0
+                            self.bridgedLog("🔇 Silence detected: \(self.manualSilenceFrameCount)/\(self.manualSilenceThreshold) frames (\(String(format: "%.1f", elapsedSeconds))s / \(String(format: "%.1f", thresholdSeconds))s)")
+                        }
+
                         if self.manualSilenceFrameCount >= self.manualSilenceThreshold {
+                            let thresholdSeconds = Double(self.manualSilenceThreshold) / 14.0
+                            self.bridgedLog("⚠️ SILENCE TIMEOUT: \(self.manualSilenceFrameCount)/\(self.manualSilenceThreshold) frames reached (\(String(format: "%.1f", thresholdSeconds))s)")
                             self.manualSilenceFrameCount = 0  // Reset counter
 
                             // Close segment and get metadata (NO callback yet)
@@ -981,17 +992,19 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                 return
             }
 
+            // Force close any existing segment (might be from auto detection)
+            // Close synchronously WITHOUT callback to avoid promise lifetime issues
+            if self.currentSegmentFile != nil {
+                self.bridgedLog("⚠️ Closing existing segment before manual mode (no callback)")
+                self.currentSegmentFile = nil  // Just close the file, don't fire callback
+                self.segmentStartTime = nil
+            }
+
             // Switch to manual mode (suppresses auto detection)
             self.currentMode = .manual
             self.currentSegmentIsManual = true
             self.silenceFrameCount = 0
             self.manualSilenceFrameCount = 0  // Reset manual silence counter
-
-            // Force close any existing segment (might be from auto detection)
-            if self.currentSegmentFile != nil {
-                self.bridgedLog("⚠️ Closing existing auto segment before manual mode")
-                self.endCurrentSegment()
-            }
 
             promise.resolve(withResult: ())
         }
@@ -1032,6 +1045,12 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
 
             // Reset silence counter
             self.manualSilenceFrameCount = 0
+
+            // Log manual segment configuration
+            self.bridgedLog("🎙️ Manual segment starting:")
+            self.bridgedLog("   - Silence timeout: \(String(format: "%.1f", timeoutSeconds))s")
+            self.bridgedLog("   - Threshold: \(self.manualSilenceThreshold) frames (at ~14 fps)")
+            self.bridgedLog("   - VAD threshold: \(self.vadThreshold) (lower = more sensitive)")
 
             // Start new manual segment
             self.startNewSegment(with: targetFormat)
@@ -1208,8 +1227,8 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                 // Stop any current playback on this node
                 playerNode.stop()
 
-                // Set volume
-                playerNode.volume = 1.0
+                // Set volume (use playbackVolume if set, otherwise default to 1.0)
+                playerNode.volume = self.playbackVolume
 
                 // Schedule file for playback
                 if self.shouldLoopPlayback {
