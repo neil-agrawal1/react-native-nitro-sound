@@ -218,8 +218,6 @@ import Speech
             return
         }
 
-        bridgedLog("🎬 ENGINE: Initializing")
-
         // Setup audio session ONCE for recording + playback
         let audioSession = AVAudioSession.sharedInstance()
         try audioSession.setCategory(.playAndRecord,
@@ -265,7 +263,6 @@ import Speech
         // Now safe to start engine with both input and output configured
         try engine.start()
         audioEngineInitialized = true
-        bridgedLog("✅ ENGINE: Initialized and running")
     }
 
 
@@ -328,8 +325,6 @@ import Speech
 
     public func startRecorder() throws -> Promise<Void> {
         let promise = Promise<Void>()
-
-        bridgedLog("🎙️ RECORDING: Starting")
 
         // Return immediately and process in background
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
@@ -582,17 +577,6 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
         )
 
         let isManual = currentSegmentIsManual
-        let modeType = isManual ? "MANUAL" : "AUTO"
-        bridgedLog("🎙️ Started \(modeType) segment: \(filename) in mode: \(currentMode)")
-        bridgedLog("🎚️ Audio format: \(tapFormat.sampleRate)Hz, \(tapFormat.channelCount) channels")
-        if isManual {
-            bridgedLog("⏱️ Manual segment silence timeout: \(Double(manualSilenceThreshold) / 14.0) seconds")
-        }
-
-        // Log VAD state when segment starts
-        if !isManual, let vadState = vadStreamState {
-            bridgedLog("🎤 Segment start - VAD triggered: \(vadState.triggered)")
-        }
 
         // Pre-roll: flush ~3s of buffered audio into AUTO segments only
         // Manual segments start recording immediately without pre-roll
@@ -601,12 +585,10 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
             for buffer in preRollBuffers {
                 try currentSegmentFile?.write(from: buffer)
             }
-            bridgedLog("📼 Pre-roll: wrote \(preRollBuffers.count) buffered frames")
             rollingBuffer.clear()
         } else if isManual {
             // Clear buffer for manual segments but don't write them
             rollingBuffer?.clear()
-            bridgedLog("✂️ Manual segment: skipping pre-roll buffer")
         }
 
         silenceCounter = 0
@@ -638,10 +620,6 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
         currentSegmentFile = nil
         segmentStartTime = nil
         silenceCounter = 0
-
-        bridgedLog("🛑 Segment closed (callback will fire after processing)")
-        bridgedLog("   - Filename: \(filename)")
-        bridgedLog("   - Is manual: \(isManual)")
 
         return (filename: filename, filePath: filePath, fileURL: fileURL, isManual: isManual)
     }
@@ -675,7 +653,6 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
         // Fire callback with processed file info
         if let callback = self.segmentCallback {
             callback(metadata.filename, metadata.filePath, metadata.isManual, actualDuration)
-            bridgedLog("✅ Segment ready: \(metadata.filename) (\(String(format: "%.1f", actualDuration))s)")
         } else {
             bridgedLog("⚠️ No callback set for segment")
         }
@@ -696,7 +673,6 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
         let filePath = absolutePath.replacingOccurrences(of: documentsPath + "/", with: "")
 
         let isManual = self.currentSegmentIsManual
-        let modeType = isManual ? "MANUAL" : "AUTO"
 
         // Close the file first
         currentSegmentFile = nil
@@ -708,43 +684,19 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
 
             // Calculate ACTUAL duration from the audio file (not timestamps)
             var duration: Double = 0
-            var durationString = "unknown"
-            var fileSize: UInt64 = 0
-            var frameCount: AVAudioFramePosition = 0
 
             do {
                 let audioFile = try AVAudioFile(forReading: fileURL)
-                frameCount = audioFile.length
+                let frameCount = audioFile.length
                 let sampleRate = audioFile.processingFormat.sampleRate
                 duration = Double(frameCount) / sampleRate
-                durationString = String(format: "%.1f seconds", duration)
-
-                // Get file size
-                let attributes = try FileManager.default.attributesOfItem(atPath: fileURL.path)
-                fileSize = attributes[.size] as? UInt64 ?? 0
-
-                self.bridgedLog("📊 Audio file stats:")
-                self.bridgedLog("   - Frames: \(frameCount)")
-                self.bridgedLog("   - Sample rate: \(sampleRate)Hz")
-                self.bridgedLog("   - Calculated duration: \(duration)s")
-                self.bridgedLog("   - File size: \(fileSize) bytes")
             } catch {
                 self.bridgedLog("⚠️ Could not read audio file duration: \(error.localizedDescription)")
-            }
-
-            // Notify JavaScript
-            self.bridgedLog("🛑 Ended \(modeType) segment: \(filename) (duration: \(durationString))")
-            self.bridgedLog("📤 Calling callback - isManual: \(isManual), duration: \(duration)s (SECONDS)")
-
-            // Log VAD state when segment ends
-            if !isManual, let vadState = self.vadStreamState {
-                self.bridgedLog("🎤 Segment end - VAD triggered: \(vadState.triggered)")
             }
 
             // Notify JavaScript via callback
             if let callback = self.segmentCallback {
                 callback(filename, filePath, isManual, duration)
-                self.bridgedLog("✅ Callback fired for \(filename)")
             } else {
                 self.bridgedLog("⚠️ No callback set for segment")
             }
@@ -804,7 +756,6 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                     let vadConfig = VadConfig(threshold: self.vadThreshold)
                     self.vadManager = try await VadManager(config: vadConfig)
                     self.vadStreamState = VadStreamState.initial()
-                    self.bridgedLog("✅ VAD initialized")
                 } catch {
                     self.bridgedLog("⚠️ VAD init failed, using fallback")
                 }
@@ -907,7 +858,6 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                     let isCurrentlyRecordingSegment = self.currentSegmentFile != nil
                     if audioIsLoud {
                         if !isCurrentlyRecordingSegment {
-                            self.bridgedLog("🔊 Speech detected! Starting AUTO segment (mode: \(self.currentMode))")
                             self.currentSegmentIsManual = false
                             // Use target 16kHz format for file writing
                             if let targetFormat = self.targetFormat {
@@ -915,17 +865,11 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                             } else {
                                 self.bridgedLog("⚠️ Cannot start segment: targetFormat is nil!")
                             }
-                        } else {
-                            // Already recording - log periodically
-                            if self.tapFrameCounter % 100 == 0 {
-                                self.bridgedLog("🎙️ AUTO segment already recording, speech continuing (frame: \(self.tapFrameCounter))")
-                            }
                         }
                         self.silenceFrameCount = 0
                     } else if isCurrentlyRecordingSegment {
                         self.silenceFrameCount += 1
                         if self.silenceFrameCount >= 50 {
-                            self.bridgedLog("🤫 Silence detected, ending AUTO segment after 50 frames")
                             // Use same processing pipeline as manual segments (trim + resample)
                             if let metadata = self.endCurrentSegmentWithoutCallback() {
                                 // No trim needed for auto segments (0 seconds)
@@ -939,25 +883,13 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                     if audioIsLoud {
                         // Reset silence counter on speech
                         if self.manualSilenceFrameCount > 0 {
-                            self.bridgedLog("🗣️ Speech detected! Resetting silence counter (was at \(self.manualSilenceFrameCount) frames)")
                             self.manualSilenceFrameCount = 0
-                        }
-                        // Log more frequently when speech is detected
-                        if self.tapFrameCounter % 100 == 0 {
-                            self.bridgedLog("🎙️ MANUAL mode: Speech detected (frame: \(self.tapFrameCounter))")
                         }
                     } else {
                         // Increment silence counter
                         self.manualSilenceFrameCount += 1
 
-                        // Log progress every 5 seconds (70 frames at ~14fps)
-                        if self.manualSilenceFrameCount % 70 == 0 {
-                            let seconds = self.manualSilenceFrameCount / 14
-                            self.bridgedLog("🤫 \(seconds) seconds of silence in manual mode...")
-                        }
-
                         if self.manualSilenceFrameCount >= self.manualSilenceThreshold {
-                            self.bridgedLog("🤫 Silence threshold reached in MANUAL mode (\(self.manualSilenceFrameCount) frames)")
                             self.manualSilenceFrameCount = 0  // Reset counter
 
                             // Close segment and get metadata (NO callback yet)
@@ -991,7 +923,6 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                 }
             }
 
-            self.bridgedLog("✅ RECORDING: Active")
             promise.resolve(withResult: ())
 
         } catch {
@@ -1011,8 +942,6 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
 
             // End any current segment before stopping
             if self.currentSegmentFile != nil {
-                self.bridgedLog("🛑 Ending current segment before stopping recorder")
-
                 // Get metadata and process with trim + resample
                 if let metadata = self.endCurrentSegmentWithoutCallback() {
                     // Use 0 seconds trim for manual stop (no silence to remove)
@@ -1028,10 +957,8 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
             // Clean up VAD resources
             self.vadManager = nil
             self.vadStreamState = nil
-            self.bridgedLog("🧹 VAD resources cleaned up")
 
             // Reset mode to idle
-            self.bridgedLog("🔄 Mode change: \(self.currentMode) → idle (stopRecorder)")
             self.currentMode = .idle
 
             // No callback to clear - using event emitting
@@ -1055,7 +982,6 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
             }
 
             // Switch to manual mode (suppresses auto detection)
-            self.bridgedLog("🔄 Mode change: \(self.currentMode) → manual")
             self.currentMode = .manual
             self.currentSegmentIsManual = true
             self.silenceFrameCount = 0
@@ -1066,8 +992,6 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                 self.bridgedLog("⚠️ Closing existing auto segment before manual mode")
                 self.endCurrentSegment()
             }
-
-            self.bridgedLog("✅ Manual mode set (ready for manual segment recording)")
 
             promise.resolve(withResult: ())
         }
@@ -1105,14 +1029,12 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
             // Configure silence timeout (default to 15 seconds if not provided)
             let timeoutSeconds = silenceTimeoutSeconds ?? 15.0
             self.manualSilenceThreshold = Int(timeoutSeconds * 14)  // ~14 fps from VAD analysis
-            self.bridgedLog("🔇 Manual silence timeout set to \(timeoutSeconds)s (\(self.manualSilenceThreshold) frames)")
 
             // Reset silence counter
             self.manualSilenceFrameCount = 0
 
             // Start new manual segment
             self.startNewSegment(with: targetFormat)
-            self.bridgedLog("🗣️ Manual segment started")
 
             promise.resolve(withResult: ())
         }
@@ -1131,15 +1053,11 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
 
             // End current segment if one exists
             if self.currentSegmentFile != nil {
-                self.bridgedLog("🛑 Stopping manual segment")
-
                 // Get metadata and process with trim + resample
                 if let metadata = self.endCurrentSegmentWithoutCallback() {
                     // Use 0 seconds trim for manual stop (no silence to remove)
                     self.processAndFireSegmentCallback(metadata: metadata, trimSeconds: 0)
                 }
-            } else {
-                self.bridgedLog("ℹ️ No segment to stop (no-op)")
             }
 
             // Stay in manual mode (as per user's answer)
@@ -1160,14 +1078,11 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
 
             // End any current segment before switching to idle
             if self.currentSegmentFile != nil {
-                self.bridgedLog("🛑 Ending current segment before idle mode")
                 self.endCurrentSegment()
             }
 
             // Switch to idle mode (keeps tap active for quick resume)
-            self.bridgedLog("🔄 Mode change: \(self.currentMode) → idle (setIdleMode)")
             self.currentMode = .idle
-            self.bridgedLog("✅ Switched to idle mode (tap remains active)")
 
             promise.resolve(withResult: ())
         }
@@ -1186,21 +1101,16 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
 
             // End any current segment before mode switch
             if self.currentSegmentFile != nil {
-                self.bridgedLog("🛑 Ending current segment before VAD mode")
                 self.endCurrentSegment()
             }
 
             // Switch to autoVAD mode
-            self.bridgedLog("🔄 Mode change: \(self.currentMode) → autoVAD")
             self.currentMode = .autoVAD
             self.silenceFrameCount = 0
             self.currentSegmentIsManual = false
 
             // Reset VAD state to fresh initial state (prevents false positives from stale data)
             self.vadStreamState = VadStreamState.initial()
-            self.bridgedLog("🧹 VAD state reset to fresh initial state")
-
-            self.bridgedLog("✅ Switched to VAD mode (automatic segmentation)")
 
             promise.resolve(withResult: ())
         }
@@ -1220,7 +1130,6 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
             // Validate threshold (0.0 to 1.0)
             let clampedThreshold = max(0.0, min(1.0, threshold))
             self.vadThreshold = Float(clampedThreshold)
-            self.bridgedLog("🎚️ VAD threshold set to \(clampedThreshold)")
 
             promise.resolve(withResult: ())
         }
