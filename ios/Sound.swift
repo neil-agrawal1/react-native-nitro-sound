@@ -1944,19 +1944,19 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
             recognizer.recognitionTask(with: request) { result, error in
                 if let error = error {
                     self.bridgedLog("❌ Transcription error: \(error.localizedDescription)")
-                    promise.reject(withError: error)  // ← Fixed here
+                    promise.reject(withError: error)
                     return
                 }
                 
                 if let result = result, result.isFinal {
                     let transcription = result.bestTranscription.formattedString
                     self.bridgedLog("✅ Transcription complete: \(transcription.prefix(100))...")
-                    promise.resolve(transcription)
+                    promise.resolve(withResult: transcription)  // ← Fixed
                 } else if let result = result {
-                    promise.resolve(result.bestTranscription.formattedString)
+                    promise.resolve(withResult: result.bestTranscription.formattedString)  // ← Fixed
                 } else {
                     self.bridgedLog("⚠️ Transcription returned no result")
-                    promise.resolve("")
+                    promise.resolve(withResult: "")  // ← Fixed
                 }
             }
         }
@@ -1984,6 +1984,11 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
 
                 // Ensure audio engine is initialized for crossfading
                 try self.initializeAudioEngine()
+
+                // Cancel seamless loop timer from previous track
+                self.loopCrossfadeTimer?.cancel()
+                self.loopCrossfadeTimer = nil
+                self.isLoopCrossfadeActive = false
 
                 // Pick next player node
                 let newNode: AVAudioPlayerNode
@@ -2038,15 +2043,9 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                 // Store audio file reference early to ensure it's retained for looping
                 self.currentAudioFile = audioFile
 
-                // Schedule file(s) for playback
+                // Schedule file for playback (just once - seamless loop will handle the rest)
                 if self.shouldLoopPlayback {
-                    // Pre-schedule multiple iterations for seamless looping
                     newNode.scheduleFile(audioFile, at: nil, completionHandler: nil)
-                    newNode.scheduleFile(audioFile, at: nil, completionHandler: nil)
-                    newNode.scheduleFile(audioFile, at: nil) { [weak self] in
-                        // When 3rd iteration completes, schedule 3 more
-                        self?.scheduleMoreLoops(audioFile: audioFile, playerNode: newNode)
-                    }
                 } else {
                     newNode.scheduleFile(audioFile, at: nil) { [weak self] in
                         self?.handlePlaybackCompletion()
@@ -2067,6 +2066,13 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                     // Swap references after new node fades in
                     self.currentPlayerNode = newNode
                     self.activePlayer = (newNode == self.audioPlayerNodeA) ? .playerA : .playerB
+
+                    // Start seamless loop timer if looping is enabled
+                    if self.shouldLoopPlayback {
+                        let totalDuration = Double(audioFile.length) / audioFile.fileFormat.sampleRate
+                        let crossfadeStartTime = max(0, totalDuration - self.loopCrossfadeDuration)
+                        self.scheduleLoopCrossfade(after: crossfadeStartTime, audioFile: audioFile, url: url)
+                    }
                 }
 
                 // Resolve immediately (crossfade started)
