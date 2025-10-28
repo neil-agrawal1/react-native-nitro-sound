@@ -48,7 +48,7 @@ import Speech
 
     // Seamless looping with crossfade
     private var loopCrossfadeTimer: DispatchSourceTimer?
-    private var loopCrossfadeDuration: TimeInterval = 0.200  // 200ms crossfade (masks audio engine buffer latency)
+    private var loopCrossfadeDuration: TimeInterval = 1.0  // 1 second crossfade
     private var isLoopCrossfadeActive: Bool = false
     private var playbackVolume: Float = 1.0  // Track desired playback volume for crossfades
 
@@ -2127,7 +2127,6 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
     ) {
         let steps = 30
         let stepDuration = duration / Double(steps)
-        let volumeStep = (targetVolume - startVolume) / Float(steps)
 
         var currentStep = 0
         node.volume = startVolume
@@ -2141,7 +2140,19 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                 return
             }
 
-            let newVolume = startVolume + Float(currentStep) * volumeStep
+            // Calculate progress (0.0 to 1.0)
+            let progress = Float(currentStep) / Float(steps)
+
+            // Equal-power crossfade curve
+            let newVolume: Float
+            if startVolume > targetVolume {
+                // Fading out: sqrt(1 - progress) * startVolume
+                newVolume = sqrt(1.0 - progress) * startVolume
+            } else {
+                // Fading in: sqrt(progress) * targetVolume
+                newVolume = sqrt(progress) * targetVolume
+            }
+
             DispatchQueue.main.async {
                 node.volume = newVolume
             }
