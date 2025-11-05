@@ -1898,7 +1898,7 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                 }
 
                 let fadeDuration = duration ?? 3.0
-                let finalVolume = targetVolume ?? 1.0
+                let finalVolume = Float(targetVolume ?? 1.0)
 
                 // Ensure audio engine is initialized for crossfading
                 try self.initializeAudioEngine()
