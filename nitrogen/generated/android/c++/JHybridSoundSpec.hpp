@@ -41,6 +41,7 @@ namespace margelo::nitro::sound {
   public:
     size_t getExternalMemorySize() noexcept override;
     void dispose() noexcept override;
+    std::string toString() override;
 
   public:
     inline const jni::global_ref<JHybridSoundSpec::javaobject>& getJavaPart() const noexcept {
@@ -74,7 +75,7 @@ namespace margelo::nitro::sound {
     std::shared_ptr<Promise<double>> getDuration() override;
     std::shared_ptr<Promise<std::string>> setLoopEnabled(bool enabled) override;
     std::shared_ptr<Promise<void>> restartEngine() override;
-    std::shared_ptr<Promise<std::string>> crossfadeTo(const std::string& uri, std::optional<double> duration) override;
+    std::shared_ptr<Promise<std::string>> crossfadeTo(const std::string& uri, std::optional<double> duration, std::optional<double> targetVolume) override;
     std::shared_ptr<Promise<void>> startAmbientLoop(const std::string& uri, double volume) override;
     std::shared_ptr<Promise<void>> stopAmbientLoop(std::optional<double> fadeDuration) override;
     void setSubscriptionDuration(double sec) override;

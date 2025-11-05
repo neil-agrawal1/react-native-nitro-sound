@@ -785,8 +785,8 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                 // VAD-based speech detection - ONLY when needed
                 var audioIsLoud = false
 
-                // Only compute VAD if we're in a mode that needs it
-                if self.currentMode == .autoVAD || self.currentMode == .manual {
+                // Only compute VAD if we're in autoVAD mode, or in manual mode with active segment
+                if self.currentMode == .autoVAD || (self.currentMode == .manual && self.currentSegmentFile != nil) {
                     if let vadMgr = self.vadManager,
                        let vadState = self.vadStreamState {
 
@@ -849,7 +849,8 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                 // In idle mode, audioIsLoud stays false - no processing
 
                 // Pre-roll - write CONVERTED 16kHz buffer (not raw hardware buffer)
-                if self.currentMode != .idle {
+                // Only write buffer in autoVAD mode, or in manual mode when segment is active
+                if self.currentMode == .autoVAD || (self.currentMode == .manual && self.currentSegmentFile != nil) {
                     self.rollingBuffer?.write(converted16kHzBuffer)
                 }
 
@@ -878,8 +879,8 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                             self.silenceFrameCount = 0
                         }
                     }
-                } else if self.currentMode == .manual {
-                    // In manual mode, detect silence for automatic progression
+                } else if self.currentMode == .manual && self.currentSegmentFile != nil {
+                    // In manual mode with active segment, detect silence for automatic progression
                     if audioIsLoud {
                         // Reset silence counter on speech
                         if self.manualSilenceFrameCount > 0 {
@@ -911,7 +912,14 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
 
                             // Process the audio file (trim silence, then resample) and fire callback
                             let silenceDurationSeconds = Double(self.manualSilenceThreshold) / 14.0
-                            self.processAndFireSegmentCallback(metadata: metadata, trimSeconds: silenceDurationSeconds)
+
+                            // Don't trim for voice command segments (1s timeout)
+                            // Only trim for longer segments like dreams (15s timeout)
+                            let shouldTrim = silenceDurationSeconds > 2.0  // If timeout > 2s, it's a dream segment
+                            let trimAmount = shouldTrim ? silenceDurationSeconds : 0.0
+
+                            self.bridgedLog("🔧 Trim decision: timeout=\(String(format: "%.1f", silenceDurationSeconds))s, trim=\(shouldTrim ? "YES" : "NO")")
+                            self.processAndFireSegmentCallback(metadata: metadata, trimSeconds: trimAmount)
 
                             // Notify JavaScript via callback
                             if let callback = self.manualSilenceCallback {
@@ -1045,12 +1053,6 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
 
             // Reset silence counter
             self.manualSilenceFrameCount = 0
-
-            // Log manual segment configuration
-            self.bridgedLog("🎙️ Manual segment starting:")
-            self.bridgedLog("   - Silence timeout: \(String(format: "%.1f", timeoutSeconds))s")
-            self.bridgedLog("   - Threshold: \(self.manualSilenceThreshold) frames (at ~14 fps)")
-            self.bridgedLog("   - VAD threshold: \(self.vadThreshold) (lower = more sensitive)")
 
             // Start new manual segment
             self.startNewSegment(with: targetFormat)
@@ -1880,7 +1882,7 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
     }
 
     // MARK: - Crossfade Methods
-    public func crossfadeTo(uri: String, duration: Double? = 3.0) throws -> Promise<String> {
+    public func crossfadeTo(uri: String, duration: Double? = 3.0, targetVolume: Double? = 1.0) throws -> Promise<String> {
         let promise = Promise<String>()
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
@@ -1896,6 +1898,7 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                 }
 
                 let fadeDuration = duration ?? 3.0
+                let finalVolume = targetVolume ?? 1.0
 
                 // Ensure audio engine is initialized for crossfading
                 try self.initializeAudioEngine()
@@ -1977,7 +1980,7 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                         currentNode.volume = 0.0  // Ensure volume stays at 0
                     }
                 }
-                self.fadeVolume(node: newNode, from: 0.0, to: 1.0, duration: fadeDuration) {
+                self.fadeVolume(node: newNode, from: 0.0, to: finalVolume, duration: fadeDuration) {
                     // Swap references after new node fades in
                     self.currentPlayerNode = newNode
                     self.activePlayer = (newNode == self.audioPlayerNodeA) ? .playerA : .playerB

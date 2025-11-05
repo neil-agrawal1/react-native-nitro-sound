@@ -56,6 +56,12 @@ namespace margelo::nitro::sound {
     method(_javaPart);
   }
 
+  std::string JHybridSoundSpec::toString() {
+    static const auto method = javaClassStatic()->getMethod<jni::JString()>("toString");
+    auto javaString = method(_javaPart);
+    return javaString->toStdString();
+  }
+
   // Properties
   
 
@@ -393,9 +399,9 @@ namespace margelo::nitro::sound {
       return __promise;
     }();
   }
-  std::shared_ptr<Promise<std::string>> JHybridSoundSpec::crossfadeTo(const std::string& uri, std::optional<double> duration) {
-    static const auto method = javaClassStatic()->getMethod<jni::local_ref<JPromise::javaobject>(jni::alias_ref<jni::JString> /* uri */, jni::alias_ref<jni::JDouble> /* duration */)>("crossfadeTo");
-    auto __result = method(_javaPart, jni::make_jstring(uri), duration.has_value() ? jni::JDouble::valueOf(duration.value()) : nullptr);
+  std::shared_ptr<Promise<std::string>> JHybridSoundSpec::crossfadeTo(const std::string& uri, std::optional<double> duration, std::optional<double> targetVolume) {
+    static const auto method = javaClassStatic()->getMethod<jni::local_ref<JPromise::javaobject>(jni::alias_ref<jni::JString> /* uri */, jni::alias_ref<jni::JDouble> /* duration */, jni::alias_ref<jni::JDouble> /* targetVolume */)>("crossfadeTo");
+    auto __result = method(_javaPart, jni::make_jstring(uri), duration.has_value() ? jni::JDouble::valueOf(duration.value()) : nullptr, targetVolume.has_value() ? jni::JDouble::valueOf(targetVolume.value()) : nullptr);
     return [&]() {
       auto __promise = Promise<std::string>::create();
       __result->cthis()->addOnResolvedListener([=](const jni::alias_ref<jni::JObject>& __boxedResult) {

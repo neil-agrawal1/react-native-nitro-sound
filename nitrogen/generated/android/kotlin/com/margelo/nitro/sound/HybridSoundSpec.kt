@@ -37,6 +37,11 @@ abstract class HybridSoundSpec: HybridObject() {
     super.updateNative(hybridData)
   }
 
+  // Default implementation of `HybridObject.toString()`
+  override fun toString(): String {
+    return "[HybridObject Sound]"
+  }
+
   // Properties
   
 
@@ -127,7 +132,7 @@ abstract class HybridSoundSpec: HybridObject() {
   
   @DoNotStrip
   @Keep
-  abstract fun crossfadeTo(uri: String, duration: Double?): Promise<String>
+  abstract fun crossfadeTo(uri: String, duration: Double?, targetVolume: Double?): Promise<String>
   
   @DoNotStrip
   @Keep

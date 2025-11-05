@@ -77,7 +77,7 @@ open class HybridSoundSpec_cxx {
    */
   public func getCxxPart() -> bridge.std__shared_ptr_HybridSoundSpec_ {
     let cachedCxxPart = self.__cxxPart.lock()
-    if cachedCxxPart.__convertToBool() {
+    if Bool(fromCxx: cachedCxxPart) {
       return cachedCxxPart
     } else {
       let newCxxPart = bridge.create_std__shared_ptr_HybridSoundSpec_(self.toUnsafe())
@@ -104,6 +104,14 @@ open class HybridSoundSpec_cxx {
   @inline(__always)
   public func dispose() {
     self.__implementation.dispose()
+  }
+
+  /**
+   * Call toString() on the Swift class.
+   */
+  @inline(__always)
+  public func toString() -> String {
+    return self.__implementation.toString()
   }
 
   // Properties
@@ -532,9 +540,9 @@ open class HybridSoundSpec_cxx {
   }
   
   @inline(__always)
-  public final func crossfadeTo(uri: std.string, duration: bridge.std__optional_double_) -> bridge.Result_std__shared_ptr_Promise_std__string___ {
+  public final func crossfadeTo(uri: std.string, duration: bridge.std__optional_double_, targetVolume: bridge.std__optional_double_) -> bridge.Result_std__shared_ptr_Promise_std__string___ {
     do {
-      let __result = try self.__implementation.crossfadeTo(uri: String(uri), duration: duration.value)
+      let __result = try self.__implementation.crossfadeTo(uri: String(uri), duration: duration.value, targetVolume: targetVolume.value)
       let __resultCpp = { () -> bridge.std__shared_ptr_Promise_std__string__ in
         let __promise = bridge.create_std__shared_ptr_Promise_std__string__()
         let __promiseHolder = bridge.wrap_std__shared_ptr_Promise_std__string__(__promise)

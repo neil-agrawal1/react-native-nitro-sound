@@ -36,7 +36,7 @@ public protocol HybridSoundSpec_protocol: HybridObject {
   func getDuration() throws -> Promise<Double>
   func setLoopEnabled(enabled: Bool) throws -> Promise<String>
   func restartEngine() throws -> Promise<Void>
-  func crossfadeTo(uri: String, duration: Double?) throws -> Promise<String>
+  func crossfadeTo(uri: String, duration: Double?, targetVolume: Double?) throws -> Promise<String>
   func startAmbientLoop(uri: String, volume: Double) throws -> Promise<Void>
   func stopAmbientLoop(fadeDuration: Double?) throws -> Promise<Void>
   func setSubscriptionDuration(sec: Double) throws -> Void
@@ -57,6 +57,13 @@ public protocol HybridSoundSpec_protocol: HybridObject {
   func mmss(secs: Double) throws -> String
   func mmssss(milisecs: Double) throws -> String
   func transcribeAudioFile(filePath: String) throws -> Promise<String>
+}
+
+public extension HybridSoundSpec_protocol {
+  /// Default implementation of ``HybridObject.toString``
+  func toString() -> String {
+    return "[HybridObject Sound]"
+  }
 }
 
 /// See ``HybridSoundSpec``

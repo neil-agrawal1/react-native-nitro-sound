@@ -63,6 +63,9 @@ namespace margelo::nitro::sound {
     void dispose() noexcept override {
       _swiftPart.dispose();
     }
+    std::string toString() override {
+      return _swiftPart.toString();
+    }
 
   public:
     // Properties
@@ -238,8 +241,8 @@ namespace margelo::nitro::sound {
       auto __value = std::move(__result.value());
       return __value;
     }
-    inline std::shared_ptr<Promise<std::string>> crossfadeTo(const std::string& uri, std::optional<double> duration) override {
-      auto __result = _swiftPart.crossfadeTo(uri, duration);
+    inline std::shared_ptr<Promise<std::string>> crossfadeTo(const std::string& uri, std::optional<double> duration, std::optional<double> targetVolume) override {
+      auto __result = _swiftPart.crossfadeTo(uri, duration, targetVolume);
       if (__result.hasError()) [[unlikely]] {
         std::rethrow_exception(__result.error());
       }
