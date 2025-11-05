@@ -552,7 +552,9 @@ import Speech
         try FileManager.default.moveItem(at: tempURL, to: fileURL)
 
         let outputDuration = Double(totalFramesConverted) / outputFormat.sampleRate
-        bridgedLog("🔄 Resampled 16kHz → 44.1kHz (\(String(format: "%.1f", outputDuration))s)")
+        if outputDuration > 0.1 {
+            bridgedLog("🔄 Resampled 16kHz → 44.1kHz (\(String(format: "%.1f", outputDuration))s)")
+        }
     }
 
         // Replace your existing startNewSegment() with this version:
@@ -818,11 +820,6 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
 
                             // Use triggered state from most recent VAD result
                             audioIsLoud = vadState.triggered
-
-                            // Log VAD state periodically (every 50 frames in manual mode to debug silence issues)
-                            if self.currentMode == .manual && self.tapFrameCounter % 50 == 0 {
-                                self.bridgedLog("🎤 Frame \(self.tapFrameCounter): VAD triggered = \(vadState.triggered), threshold = \(self.vadThreshold)")
-                            }
                         } else {
                             // Buffer data is invalid - log and skip VAD for this frame
                             // if self.tapFrameCounter % 100 == 0 {
@@ -1248,11 +1245,6 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                             currentPos = Double(playerTime.sampleTime) / audioFile.fileFormat.sampleRate
                         }
 
-                        self.bridgedLog("🎬 scheduleFile COMPLETION HANDLER fired!")
-                        self.bridgedLog("  ⏱️ Position when fired: \(String(format: "%.2f", currentPos))s")
-                        self.bridgedLog("  📊 Expected duration: \(String(format: "%.2f", Double(audioFile.length) / audioFile.fileFormat.sampleRate))s")
-                        self.bridgedLog("  ▶️ Node isPlaying: \(playerNode.isPlaying)")
-
                         // DO NOT call stop() here - this completion handler fires when the buffer is SCHEDULED,
                         // not when playback ends. Calling stop() here causes premature audio cutoff.
                         // The timer-based detection (60ms polling of isPlaying) handles actual playback completion.
@@ -1308,8 +1300,6 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
         timer.setEventHandler { [weak self] in
             guard let self = self else { return }
 
-            self.bridgedLog("⏰ Loop timer fired!")
-
             // Check if looping is still enabled
             guard self.shouldLoopPlayback else {
                 self.bridgedLog("🛑 Loop disabled, stopping crossfade timer")
@@ -1343,49 +1333,32 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
             self.activePlayer = .playerA
         }
 
-        self.bridgedLog("🔄 Crossfading loop: \(self.activePlayer == .playerA ? "B→A" : "A→B")")
-        self.bridgedLog("   Old node isPlaying: \(oldNode.isPlaying), volume: \(oldNode.volume)")
-        self.bridgedLog("   New node isPlaying: \(newNode.isPlaying), volume: \(newNode.volume)")
-        self.bridgedLog("   Duration: \(String(format: "%.2f", Double(audioFile.length) / audioFile.fileFormat.sampleRate))s")
+        let totalDuration = Double(audioFile.length) / audioFile.fileFormat.sampleRate
+        self.bridgedLog("🔄 Crossfading loop: \(self.activePlayer == .playerA ? "B→A" : "A→B") (\(String(format: "%.1f", totalDuration))s)")
 
         // Prepare new node
-        self.bridgedLog("   📋 Stopping and resetting new node...")
         newNode.stop()
         newNode.reset()
         newNode.volume = 0.0
-
-        self.bridgedLog("   📋 Scheduling file on new node...")
         newNode.scheduleFile(audioFile, at: nil, completionHandler: nil)
-
-        self.bridgedLog("   ▶️ Starting playback on new node...")
         newNode.play()
-
-        self.bridgedLog("   New node isPlaying after play(): \(newNode.isPlaying)")
 
         // Schedule next crossfade IMMEDIATELY (before crossfade completes)
         // This ensures timing is relative to when playback STARTED, not when fade finishes
-        let totalDuration = Double(audioFile.length) / audioFile.fileFormat.sampleRate
         let crossfadeStartTime = max(0, totalDuration - self.loopCrossfadeDuration)
-        self.bridgedLog("   ⏰ Next crossfade scheduled in \(String(format: "%.3f", crossfadeStartTime))s")
         self.scheduleLoopCrossfade(after: crossfadeStartTime, audioFile: audioFile, url: url)
 
-        // Crossfade (20ms) - respect current playback volume
-        self.bridgedLog("   🎚️ Starting fade out (old): \(self.playbackVolume) → 0.0 over \(String(format: "%.3f", self.loopCrossfadeDuration))s")
+        // Crossfade - respect current playback volume
         self.fadeVolume(node: oldNode, from: self.playbackVolume, to: 0.0, duration: self.loopCrossfadeDuration) {
-            self.bridgedLog("   ✅ Fade out complete, stopping old node")
             oldNode.stop()
             oldNode.reset()
         }
 
-        self.bridgedLog("   🎚️ Starting fade in (new): 0.0 → \(self.playbackVolume) over \(String(format: "%.3f", self.loopCrossfadeDuration))s")
         self.fadeVolume(node: newNode, from: 0.0, to: self.playbackVolume, duration: self.loopCrossfadeDuration) { [weak self] in
             guard let self = self else { return }
-
-            self.bridgedLog("   ✅ Fade in complete")
             // Update current player reference and reset flag
             self.currentPlayerNode = newNode
             self.isLoopCrossfadeActive = false
-            self.bridgedLog("   🏁 Seamless crossfade cycle complete")
         }
     }
 
@@ -1841,16 +1814,13 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                 return
             }
 
-            self.bridgedLog("🎤 Starting file transcription")
-
             // Create recognition request
             let request = SFSpeechURLRecognitionRequest(url: url)
             request.shouldReportPartialResults = false
-            
+
             // Start recognition task
             recognizer.recognitionTask(with: request) { result, error in
                 if let error = error {
-                    self.bridgedLog("ℹ️ Transcription failed: \(error.localizedDescription)")
                     promise.resolve(withResult: "No Speech Detected")
                     return
                 }
@@ -1858,7 +1828,6 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                 if let result = result, result.isFinal {
                     let transcription = result.bestTranscription.formattedString
                     if transcription.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        self.bridgedLog("ℹ️ No speech detected in audio")
                         promise.resolve(withResult: "No Speech Detected")
                     } else {
                         self.bridgedLog("✅ Transcription complete: \(transcription.prefix(100))...")
@@ -2251,11 +2220,6 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                        let playerTime = playerNode.playerTime(forNodeTime: nodeTime) {
                         stopPos = Double(playerTime.sampleTime) / audioFile.fileFormat.sampleRate
                     }
-
-                    self.bridgedLog("⏹️ TIMER detected playback stopped!")
-                    self.bridgedLog("  ⏱️ Position when detected: \(String(format: "%.2f", stopPos))s")
-                    self.bridgedLog("  📊 Expected duration: \(String(format: "%.2f", durationSeconds))s")
-                    self.bridgedLog("  ⚠️ Difference: \(String(format: "%.2f", durationSeconds - stopPos))s early")
 
                     // Emit playback end events (will emit to both listeners if registered)
                     self.emitPlaybackEndEvents(durationMs: durationMs, includePlaybackUpdate: true)
