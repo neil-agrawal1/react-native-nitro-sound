@@ -1136,6 +1136,25 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
         return promise
     }
 
+    public func getCurrentMode() throws -> Promise<RecordingMode> {
+        let promise = Promise<RecordingMode>()
+        
+        // Return current mode (synchronous - just reading property)
+        // Convert Swift SegmentMode enum to RecordingMode type
+        let recordingMode: RecordingMode
+        switch self.currentMode {
+        case .idle:
+            recordingMode = RecordingMode(fromString: "idle")!
+        case .manual:
+            recordingMode = RecordingMode(fromString: "manual")!
+        case .autoVAD:
+            recordingMode = RecordingMode(fromString: "vad")!  // TypeScript uses 'vad', Swift uses 'autoVAD'
+        }
+        
+        promise.resolve(withResult: recordingMode)
+        return promise
+    }
+
     public func setVADThreshold(threshold: Double) throws -> Promise<Void> {
         let promise = Promise<Void>()
 

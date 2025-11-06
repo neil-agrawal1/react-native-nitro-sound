@@ -19,6 +19,7 @@ namespace margelo::nitro::sound {
       prototype.registerHybridMethod("setVADMode", &HybridSoundSpec::setVADMode);
       prototype.registerHybridMethod("setManualMode", &HybridSoundSpec::setManualMode);
       prototype.registerHybridMethod("setIdleMode", &HybridSoundSpec::setIdleMode);
+      prototype.registerHybridMethod("getCurrentMode", &HybridSoundSpec::getCurrentMode);
       prototype.registerHybridMethod("startManualSegment", &HybridSoundSpec::startManualSegment);
       prototype.registerHybridMethod("stopManualSegment", &HybridSoundSpec::stopManualSegment);
       prototype.registerHybridMethod("setVADThreshold", &HybridSoundSpec::setVADThreshold);

@@ -16,6 +16,8 @@ namespace margelo::nitro::sound { struct PlayBackType; }
 namespace margelo::nitro::sound { struct PlaybackEndType; }
 // Forward declaration of `RecordBackType` to properly resolve imports.
 namespace margelo::nitro::sound { struct RecordBackType; }
+// Forward declaration of `RecordingMode` to properly resolve imports.
+namespace margelo::nitro::sound { enum class RecordingMode; }
 
 // Forward declarations of Swift defined types
 // Forward declaration of `HybridSoundSpec_cxx` to properly resolve imports.
@@ -26,6 +28,7 @@ namespace NitroSound { class HybridSoundSpec_cxx; }
 #include "PlayBackType.hpp"
 #include "PlaybackEndType.hpp"
 #include "RecordBackType.hpp"
+#include "RecordingMode.hpp"
 #include <NitroModules/Promise.hpp>
 #include <NitroModules/PromiseHolder.hpp>
 #include <NitroModules/Result.hpp>
@@ -97,6 +100,40 @@ namespace margelo::nitro::sound::bridge::swift {
   Func_void_std__exception_ptr create_Func_void_std__exception_ptr(void* NON_NULL swiftClosureWrapper) noexcept;
   inline Func_void_std__exception_ptr_Wrapper wrap_Func_void_std__exception_ptr(Func_void_std__exception_ptr value) noexcept {
     return Func_void_std__exception_ptr_Wrapper(std::move(value));
+  }
+  
+  // pragma MARK: std::shared_ptr<Promise<RecordingMode>>
+  /**
+   * Specialized version of `std::shared_ptr<Promise<RecordingMode>>`.
+   */
+  using std__shared_ptr_Promise_RecordingMode__ = std::shared_ptr<Promise<RecordingMode>>;
+  inline std::shared_ptr<Promise<RecordingMode>> create_std__shared_ptr_Promise_RecordingMode__() noexcept {
+    return Promise<RecordingMode>::create();
+  }
+  inline PromiseHolder<RecordingMode> wrap_std__shared_ptr_Promise_RecordingMode__(std::shared_ptr<Promise<RecordingMode>> promise) noexcept {
+    return PromiseHolder<RecordingMode>(std::move(promise));
+  }
+  
+  // pragma MARK: std::function<void(RecordingMode /* result */)>
+  /**
+   * Specialized version of `std::function<void(RecordingMode)>`.
+   */
+  using Func_void_RecordingMode = std::function<void(RecordingMode /* result */)>;
+  /**
+   * Wrapper class for a `std::function<void(RecordingMode / * result * /)>`, this can be used from Swift.
+   */
+  class Func_void_RecordingMode_Wrapper final {
+  public:
+    explicit Func_void_RecordingMode_Wrapper(std::function<void(RecordingMode /* result */)>&& func): _function(std::make_unique<std::function<void(RecordingMode /* result */)>>(std::move(func))) {}
+    inline void call(int result) const noexcept {
+      _function->operator()(static_cast<RecordingMode>(result));
+    }
+  private:
+    std::unique_ptr<std::function<void(RecordingMode /* result */)>> _function;
+  } SWIFT_NONCOPYABLE;
+  Func_void_RecordingMode create_Func_void_RecordingMode(void* NON_NULL swiftClosureWrapper) noexcept;
+  inline Func_void_RecordingMode_Wrapper wrap_Func_void_RecordingMode(Func_void_RecordingMode value) noexcept {
+    return Func_void_RecordingMode_Wrapper(std::move(value));
   }
   
   // pragma MARK: std::optional<double>
@@ -370,6 +407,15 @@ namespace margelo::nitro::sound::bridge::swift {
   }
   inline Result_std__shared_ptr_Promise_void___ create_Result_std__shared_ptr_Promise_void___(const std::exception_ptr& error) noexcept {
     return Result<std::shared_ptr<Promise<void>>>::withError(error);
+  }
+  
+  // pragma MARK: Result<std::shared_ptr<Promise<RecordingMode>>>
+  using Result_std__shared_ptr_Promise_RecordingMode___ = Result<std::shared_ptr<Promise<RecordingMode>>>;
+  inline Result_std__shared_ptr_Promise_RecordingMode___ create_Result_std__shared_ptr_Promise_RecordingMode___(const std::shared_ptr<Promise<RecordingMode>>& value) noexcept {
+    return Result<std::shared_ptr<Promise<RecordingMode>>>::withValue(value);
+  }
+  inline Result_std__shared_ptr_Promise_RecordingMode___ create_Result_std__shared_ptr_Promise_RecordingMode___(const std::exception_ptr& error) noexcept {
+    return Result<std::shared_ptr<Promise<RecordingMode>>>::withError(error);
   }
   
   // pragma MARK: Result<std::shared_ptr<Promise<std::string>>>

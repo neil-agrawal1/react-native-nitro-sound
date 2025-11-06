@@ -7,6 +7,8 @@
 
 #include "JHybridSoundSpec.hpp"
 
+// Forward declaration of `RecordingMode` to properly resolve imports.
+namespace margelo::nitro::sound { enum class RecordingMode; }
 // Forward declaration of `RecordBackType` to properly resolve imports.
 namespace margelo::nitro::sound { struct RecordBackType; }
 // Forward declaration of `PlayBackType` to properly resolve imports.
@@ -16,6 +18,8 @@ namespace margelo::nitro::sound { struct PlaybackEndType; }
 
 #include <NitroModules/Promise.hpp>
 #include <NitroModules/JPromise.hpp>
+#include "RecordingMode.hpp"
+#include "JRecordingMode.hpp"
 #include <string>
 #include <optional>
 #include <vector>
@@ -133,6 +137,22 @@ namespace margelo::nitro::sound {
       auto __promise = Promise<void>::create();
       __result->cthis()->addOnResolvedListener([=](const jni::alias_ref<jni::JObject>& /* unit */) {
         __promise->resolve();
+      });
+      __result->cthis()->addOnRejectedListener([=](const jni::alias_ref<jni::JThrowable>& __throwable) {
+        jni::JniException __jniError(__throwable);
+        __promise->reject(std::make_exception_ptr(__jniError));
+      });
+      return __promise;
+    }();
+  }
+  std::shared_ptr<Promise<RecordingMode>> JHybridSoundSpec::getCurrentMode() {
+    static const auto method = javaClassStatic()->getMethod<jni::local_ref<JPromise::javaobject>()>("getCurrentMode");
+    auto __result = method(_javaPart);
+    return [&]() {
+      auto __promise = Promise<RecordingMode>::create();
+      __result->cthis()->addOnResolvedListener([=](const jni::alias_ref<jni::JObject>& __boxedResult) {
+        auto __result = jni::static_ref_cast<JRecordingMode>(__boxedResult);
+        __promise->resolve(__result->toCpp());
       });
       __result->cthis()->addOnRejectedListener([=](const jni::alias_ref<jni::JThrowable>& __throwable) {
         jni::JniException __jniError(__throwable);

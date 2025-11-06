@@ -52,6 +52,7 @@ export interface PlaybackEndType {
 export type RecordBackListener = (recordingMeta: RecordBackType) => void;
 export type PlayBackListener = (playbackMeta: PlayBackType) => void;
 export type PlaybackEndListener = (playbackEndMeta: PlaybackEndType) => void;
+export type RecordingMode = 'idle' | 'manual' | 'vad';
 export interface Sound extends HybridObject<{
     ios: 'swift';
     android: 'kotlin';
@@ -61,6 +62,7 @@ export interface Sound extends HybridObject<{
     setVADMode(): Promise<void>;
     setManualMode(): Promise<void>;
     setIdleMode(): Promise<void>;
+    getCurrentMode(): Promise<RecordingMode>;
     startManualSegment(silenceTimeoutSeconds?: number): Promise<void>;
     stopManualSegment(): Promise<void>;
     setVADThreshold(threshold: number): Promise<void>;

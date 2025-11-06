@@ -12,6 +12,8 @@
 // Forward declaration of `HybridSoundSpec_cxx` to properly resolve imports.
 namespace NitroSound { class HybridSoundSpec_cxx; }
 
+// Forward declaration of `RecordingMode` to properly resolve imports.
+namespace margelo::nitro::sound { enum class RecordingMode; }
 // Forward declaration of `RecordBackType` to properly resolve imports.
 namespace margelo::nitro::sound { struct RecordBackType; }
 // Forward declaration of `PlayBackType` to properly resolve imports.
@@ -20,6 +22,7 @@ namespace margelo::nitro::sound { struct PlayBackType; }
 namespace margelo::nitro::sound { struct PlaybackEndType; }
 
 #include <NitroModules/Promise.hpp>
+#include "RecordingMode.hpp"
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -107,6 +110,14 @@ namespace margelo::nitro::sound {
     }
     inline std::shared_ptr<Promise<void>> setIdleMode() override {
       auto __result = _swiftPart.setIdleMode();
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+      auto __value = std::move(__result.value());
+      return __value;
+    }
+    inline std::shared_ptr<Promise<RecordingMode>> getCurrentMode() override {
+      auto __result = _swiftPart.getCurrentMode();
       if (__result.hasError()) [[unlikely]] {
         std::rethrow_exception(__result.error());
       }
