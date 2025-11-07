@@ -162,10 +162,21 @@ import Speech
     }
 
     private func setupAudioInterruptionHandling() {
+        // Handle audio interruptions (phone calls, other apps, etc.)
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(handleAudioInterruption),
             name: AVAudioSession.interruptionNotification,
+            object: AVAudioSession.sharedInstance()
+        )
+        
+        // Handle audio route changes (headphones, Bluetooth, etc.)
+        // CRITICAL: Route changes can change hardware format, causing format errors
+        // We need to reinitialize the engine when routes change
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleRouteChange),
+            name: AVAudioSession.routeChangeNotification,
             object: AVAudioSession.sharedInstance()
         )
     }
@@ -178,27 +189,397 @@ import Speech
         }
 
         if type == .ended {
+            // Check if we should resume (iOS tells us via interruption options)
+            let shouldResume = (userInfo[AVAudioSessionInterruptionOptionKey] as? UInt) == AVAudioSession.InterruptionOptions.shouldResume.rawValue
+            
+            bridgedLog("🔊 Audio interruption ended (shouldResume: \(shouldResume))")
+            logStateSnapshot(context: "interruption-ended")
+            
+            // CRITICAL: If audio was playing (silent loop, ambient loop, or regular playback),
+            // we need to restart it to keep the session active (like Spotify does)
+            // This keeps the app alive in background and prevents session deactivation
+            
             // Restart engine after interruption
             if audioEngineInitialized {
+                bridgedLog("🔧 Engine is initialized - attempting restart")
+                var sessionReactivated = false
                 do {
+                    // restartAudioEngine() reactivates the session AND restarts the engine
+                    bridgedLog("🔧 Calling restartAudioEngine()...")
                     try restartAudioEngine()
+                    sessionReactivated = true
+                    bridgedLog("✅ Engine restart succeeded")
+                    logStateSnapshot(context: "after-restart-success")
+                    
+                    // Resume playback if we were playing before interruption
+                    // This keeps the session active, preventing deactivation (like Spotify)
+                    // Only resume if session reactivation succeeded
+                    if shouldResume && sessionReactivated {
+                        bridgedLog("🔄 Attempting to resume playback (shouldResume=\(shouldResume), sessionReactivated=\(sessionReactivated))")
+                        // Resume main playback if it was looping (silent loop or journey audio)
+                        if shouldLoopPlayback, let playerNode = currentPlayerNode, let audioFile = currentAudioFile {
+                            bridgedLog("🔄 Resuming loop playback after interruption")
+                            bridgedLog("   Player node state: isPlaying=\(playerNode.isPlaying), uri=\(currentPlaybackURI ?? "none")")
+                            // Player node might have stopped, restart it with seamless looping
+                            if !playerNode.isPlaying {
+                                bridgedLog("   Player node stopped - restarting with seamless loop")
+                                // Use the same seamless loop logic as startSeamlessLoop()
+                                if let uri = currentPlaybackURI {
+                                    let url: URL
+                                    if uri.hasPrefix("file://") {
+                                        url = URL(string: uri)!
+                                    } else {
+                                        url = URL(fileURLWithPath: uri)
+                                    }
+                                    startSeamlessLoop(audioFile: audioFile, url: url)
+                                    bridgedLog("   ✅ Seamless loop restarted")
+                                } else {
+                                    // Fallback: simple reschedule
+                                    bridgedLog("   Using fallback reschedule (no URI)")
+                                    playerNode.scheduleFile(audioFile, at: nil, completionHandler: nil)
+                                    playerNode.play()
+                                    bridgedLog("   ✅ Fallback playback started")
+                                }
+                            } else {
+                                bridgedLog("   Player node already playing - no restart needed")
+                            }
+                        } else {
+                            bridgedLog("   No loop playback to resume (shouldLoopPlayback=\(shouldLoopPlayback), playerNode=\(currentPlayerNode != nil), audioFile=\(currentAudioFile != nil))")
+                        }
+                        
+                        // Resume ambient loop if it was playing
+                        if isAmbientLoopPlaying, let playerC = audioPlayerNodeC, let ambientFile = currentAmbientFile {
+                            bridgedLog("🔄 Resuming ambient loop after interruption")
+                            bridgedLog("   Ambient player state: isPlaying=\(playerC.isPlaying)")
+                            if !playerC.isPlaying {
+                                bridgedLog("   Ambient player stopped - restarting")
+                                // Reschedule multiple iterations for seamless looping
+                                playerC.scheduleFile(ambientFile, at: nil, completionHandler: nil)
+                                playerC.scheduleFile(ambientFile, at: nil, completionHandler: nil)
+                                playerC.scheduleFile(ambientFile, at: nil) { [weak self] in
+                                    self?.scheduleMoreAmbientLoops(audioFile: ambientFile, playerNode: playerC)
+                                }
+                                playerC.play()
+                                bridgedLog("   ✅ Ambient loop restarted")
+                            } else {
+                                bridgedLog("   Ambient player already playing - no restart needed")
+                            }
+                        } else {
+                            bridgedLog("   No ambient loop to resume (isAmbientLoopPlaying=\(isAmbientLoopPlaying), playerC=\(audioPlayerNodeC != nil), ambientFile=\(currentAmbientFile != nil))")
+                        }
+                        
+                        bridgedLog("🔄 Playback resume attempt completed")
+                        logStateSnapshot(context: "after-playback-resume")
+                    } else {
+                        bridgedLog("⚠️ Not resuming playback: shouldResume=\(shouldResume), sessionReactivated=\(sessionReactivated)")
+                    }
                 } catch {
-                    bridgedLog("❌ Failed to restart engine: \(error.localizedDescription)")
+                    // In background with locked device, reactivation might fail
+                    // This is OK - the next audio operation (alarm, silent loop restart) will reinitialize
+                    let nsError = error as NSError
+                    let errorCode = nsError.code
+                    
+                    bridgedLog("❌ Engine restart failed during interruption recovery")
+                    bridgedLog("   Error: \(error.localizedDescription)")
+                    bridgedLog("   Error code: \(errorCode)")
+                    logStateSnapshot(context: "after-restart-failure")
+                    
+                    if errorCode == 2003329396 { // kAudioFormatUnsupportedDataFormatError
+                        bridgedLog("⚠️ Background reactivation failed (format error) - destroying engine for reinitialize")
+                        // Destroy engine so next operation fully reinitializes
+                        destroyEngineForReinitialize()
+                    } else {
+                        bridgedLog("❌ Failed to restart engine: \(error.localizedDescription) (code: \(errorCode))")
+                    }
+                    // Don't crash - next operation will handle reinitialization
                 }
+            } else {
+                bridgedLog("⚠️ Engine not initialized - skipping restart")
             }
+        } else if type == .began {
+            bridgedLog("🔇 Audio interruption began")
+            logStateSnapshot(context: "interruption-began")
+            // Engine will be stopped automatically by iOS
+            // Player nodes will also stop automatically
+            bridgedLog("   Engine and players will be stopped automatically by iOS")
         }
+    }
+    
+    @objc private func handleRouteChange(notification: Notification) {
+        guard let userInfo = notification.userInfo,
+              let reasonValue = userInfo[AVAudioSessionRouteChangeReasonKey] as? UInt,
+              let reason = AVAudioSession.RouteChangeReason(rawValue: reasonValue) else {
+            bridgedLog("⚠️ Route change notification received but missing required info")
+            return
+        }
+        
+        let audioSession = AVAudioSession.sharedInstance()
+        let currentRoute = audioSession.currentRoute
+        
+        // Get previous route if available
+        let previousRoute = userInfo[AVAudioSessionRouteChangePreviousRouteKey] as? AVAudioSessionRouteDescription
+        let previousOutputs = previousRoute?.outputs.map { $0.portName }.joined(separator: ", ") ?? "unknown"
+        
+        bridgedLog("🔌 Audio route changed: \(routeChangeReasonDescription(reason))")
+        bridgedLog("   Previous route outputs: [\(previousOutputs)]")
+        bridgedLog("   Current route outputs: [\(currentRoute.outputs.map { $0.portName }.joined(separator: ", "))]")
+        
+        logStateSnapshot(context: "route-change-\(routeChangeReasonDescription(reason))")
+        
+        // Route changes can change hardware format (sample rate, buffer duration, channels)
+        // This causes format errors if we try to use the old format
+        // We need to destroy and reinitialize the engine with the new format
+        
+        switch reason {
+        case .newDeviceAvailable:
+            bridgedLog("   ⚠️ New device available - format may have changed, destroying engine")
+            bridgedLog("   ⚠️ CRITICAL: This will remove mic tap - may not be reinstallable if phone is locked")
+            // New device connected - format might have changed
+            destroyEngineForReinitialize()
+            
+        case .oldDeviceUnavailable:
+            bridgedLog("   ⚠️ Old device removed - format definitely changed, destroying engine")
+            bridgedLog("   ⚠️ CRITICAL: This will remove mic tap - may not be reinstallable if phone is locked")
+            // Device removed - format definitely changed
+            destroyEngineForReinitialize()
+            
+        case .categoryChange:
+            bridgedLog("   ⚠️ Category changed - format may be affected, destroying engine")
+            bridgedLog("   ⚠️ CRITICAL: This will remove mic tap - may not be reinstallable if phone is locked")
+            // Category change can affect format
+            destroyEngineForReinitialize()
+            
+        case .override:
+            // Route override (e.g., AirPlay) - don't destroy engine
+            // According to Apple docs, we should NOT pause playback on override
+            bridgedLog("   ✅ Route override - keeping engine (no pause needed per Apple docs)")
+            bridgedLog("   No engine destruction needed for override")
+            
+        case .wakeFromSleep:
+            bridgedLog("   ⚠️ Woke from sleep - format may have changed, destroying engine")
+            bridgedLog("   ⚠️ CRITICAL: This will remove mic tap - may not be reinstallable if phone is locked")
+            // Device woke up - format might have changed
+            destroyEngineForReinitialize()
+            
+        case .noSuitableRouteForCategory:
+            bridgedLog("   ⚠️ No suitable route - destroying engine, will reinitialize when route available")
+            bridgedLog("   ⚠️ CRITICAL: This will remove mic tap - may not be reinstallable if phone is locked")
+            // No route available - destroy engine, will reinitialize when route available
+            destroyEngineForReinitialize()
+            
+        default:
+            bridgedLog("   ⚠️ Unknown route change reason - destroying engine to be safe")
+            bridgedLog("   ⚠️ CRITICAL: This will remove mic tap - may not be reinstallable if phone is locked")
+            destroyEngineForReinitialize()
+        }
+        
+        bridgedLog("🔌 Route change handling completed")
+        logStateSnapshot(context: "after-route-change")
+    }
+    
+    private func destroyEngineForReinitialize() {
+        // Destroy engine instance so it gets recreated with fresh format on next operation
+        // This prevents format errors when hardware format changes
+        if audioEngineInitialized {
+            bridgedLog("🔧 Starting engine destruction for format reinitialization")
+            logStateSnapshot(context: "before-engine-destruction")
+            
+            // Log critical state before destruction
+            let modeDescription: String
+            switch currentMode {
+            case .idle:
+                modeDescription = "idle"
+            case .manual:
+                modeDescription = "manual"
+            case .autoVAD:
+                modeDescription = "autoVAD"
+            }
+            let hasMicTap = audioEngine?.inputNode.engine != nil
+            let hasActiveSegment = currentSegmentFile != nil
+            
+            bridgedLog("   🎙️ Current recording state: mode=\(modeDescription), segmentActive=\(hasActiveSegment), micTapExists=\(hasMicTap)")
+            bridgedLog("   🔊 Current playback state: looping=\(shouldLoopPlayback), ambient=\(isAmbientLoopPlaying)")
+            bridgedLog("   🔧 Engine state: running=\(audioEngine?.isRunning ?? false)")
+            
+            if hasMicTap {
+                bridgedLog("   ⚠️⚠️⚠️ WARNING: Mic tap is active - removing it now!")
+                bridgedLog("   ⚠️⚠️⚠️ CRITICAL: Mic tap CANNOT be reinstalled when phone is locked!")
+                bridgedLog("   ⚠️⚠️⚠️ Recording will STOP and may not resume until app wakes!")
+            }
+            
+            if hasActiveSegment {
+                bridgedLog("   ⚠️ WARNING: Active segment exists - will be lost when engine destroyed")
+            }
+            
+            // Step 1: Stop engine if running
+            if let engine = audioEngine, engine.isRunning {
+                bridgedLog("   🔧 Step 1: Stopping engine...")
+                engine.stop()
+                bridgedLog("   ✅ Engine stopped")
+            } else {
+                bridgedLog("   ℹ️ Engine not running - skipping stop")
+            }
+            
+            // Step 2: Remove tap if active
+            if let engine = audioEngine {
+                bridgedLog("   🔧 Step 2: Removing microphone tap...")
+                engine.inputNode.removeTap(onBus: 0)
+                bridgedLog("   ✅ Microphone tap removed")
+                if hasMicTap {
+                    bridgedLog("   ⚠️⚠️⚠️ MIC TAP REMOVED - Recording capability lost!")
+                }
+            } else {
+                bridgedLog("   ℹ️ No engine instance - skipping tap removal")
+            }
+            
+            // Step 3: Destroy engine and nodes
+            bridgedLog("   🔧 Step 3: Destroying engine and player nodes...")
+            audioEngine = nil
+            audioPlayerNodeA = nil
+            audioPlayerNodeB = nil
+            audioPlayerNodeC = nil
+            bridgedLog("   ✅ Engine and nodes destroyed")
+            
+            // Step 4: Reset flag so next operation fully reinitializes
+            audioEngineInitialized = false
+            bridgedLog("   ✅ Initialization flag reset")
+            
+            bridgedLog("✅ Engine destruction completed")
+            bridgedLog("   Next audio operation will fully reinitialize engine with new format")
+            if hasMicTap {
+                bridgedLog("   ⚠️⚠️⚠️ REMINDER: Mic tap was removed - may not be reinstallable if phone is locked!")
+            }
+            logStateSnapshot(context: "after-engine-destruction")
+        } else {
+            bridgedLog("ℹ️ Engine not initialized - nothing to destroy")
+        }
+    }
+    
+    private func routeChangeReasonDescription(_ reason: AVAudioSession.RouteChangeReason) -> String {
+        switch reason {
+        case .newDeviceAvailable:
+            return "newDeviceAvailable"
+        case .oldDeviceUnavailable:
+            return "oldDeviceUnavailable"
+        case .categoryChange:
+            return "categoryChange"
+        case .override:
+            return "override"
+        case .wakeFromSleep:
+            return "wakeFromSleep"
+        case .noSuitableRouteForCategory:
+            return "noSuitableRouteForCategory"
+        @unknown default:
+            return "unknown(\(reason.rawValue))"
+        }
+    }
+    
+    // MARK: - State Snapshot Helper
+    
+    private func logStateSnapshot(context: String) {
+        let audioSession = AVAudioSession.sharedInstance()
+        let sessionCategory = audioSession.category.rawValue
+        let currentRoute = audioSession.currentRoute
+        let routeOutputs = currentRoute.outputs.map { $0.portName }.joined(separator: ", ")
+        let sampleRate = audioSession.sampleRate
+        
+        let modeDescription: String
+        switch currentMode {
+        case .idle:
+            modeDescription = "idle"
+        case .manual:
+            modeDescription = "manual"
+        case .autoVAD:
+            modeDescription = "autoVAD"
+        }
+        
+        let micTapActive = audioEngine?.inputNode.engine != nil
+        let segmentActive = currentSegmentFile != nil
+        let engineRunning = audioEngine?.isRunning ?? false
+        
+        bridgedLog("📊 STATE SNAPSHOT [\(context)]:")
+        bridgedLog("   🎙️ Recording: mode=\(modeDescription), segmentActive=\(segmentActive), micTapActive=\(micTapActive)")
+        bridgedLog("   🔊 Playback: looping=\(shouldLoopPlayback), ambient=\(isAmbientLoopPlaying), uri=\(currentPlaybackURI ?? "none")")
+        bridgedLog("   🔧 Engine: initialized=\(audioEngineInitialized), running=\(engineRunning)")
+        bridgedLog("   📡 Session: category=\(sessionCategory), sampleRate=\(Int(sampleRate))Hz, route=[\(routeOutputs)]")
     }
 
     private func restartAudioEngine() throws {
         guard let engine = audioEngine else {
+            bridgedLog("❌ Cannot restart engine - engine is nil")
             throw RuntimeError.error(withMessage: "No engine to restart")
         }
 
-        // Session is already active from initializeAudioEngine(), no need to reactivate
+        bridgedLog("🔧 Starting engine restart process...")
+        bridgedLog("   Engine state: initialized=\(audioEngineInitialized), running=\(engine.isRunning)")
 
-        // Restart engine if stopped
+        // IMPORTANT: AVAudioSession and AVAudioEngine are separate systems:
+        // - AVAudioSession: iOS system-level singleton that controls audio permissions/routing
+        // - AVAudioEngine: Your app's audio processing engine instance
+        //
+        // After an interruption, iOS may deactivate the session (setActive(false))
+        // but the engine instance still exists. We must reactivate the SESSION first,
+        // then restart the ENGINE. Trying to start the engine without an active session
+        // can cause format errors (2003329396) because hardware isn't accessible.
+        let audioSession = AVAudioSession.sharedInstance()
+        
+        // Log session state before reactivation
+        let sessionCategory = audioSession.category.rawValue
+        let currentRoute = audioSession.currentRoute
+        bridgedLog("   📡 Session state before reactivation: category=\(sessionCategory)")
+        bridgedLog("   🔌 Current route: [\(currentRoute.outputs.map { $0.portName }.joined(separator: ", "))]")
+        
+        // Step 1: Reactivate the audio session (tell iOS we want audio access again)
+        // NOTE: In background with locked device, this might fail if iOS has suspended the app.
+        // That's OK - the next audio operation (alarm, silent loop) will fully reinitialize.
+        bridgedLog("   🔧 Step 1: Reactivating audio session...")
+        do {
+            try audioSession.setActive(true, options: [])
+            bridgedLog("   ✅ Audio session reactivated successfully")
+        } catch {
+            let nsError = error as NSError
+            bridgedLog("   ⚠️ Failed to reactivate audio session: \(error.localizedDescription) (code: \(nsError.code))")
+            bridgedLog("   ⚠️ This may fail in background - continuing anyway")
+            // In background, this might fail - that's OK, next operation will reinitialize
+            // Continue anyway - session might still be active or will be activated by engine.start()
+        }
+
+        // Step 2: Restart the audio engine (start audio processing)
         if !engine.isRunning {
-            try engine.start()
+            bridgedLog("   🔧 Step 2: Starting audio engine...")
+            do {
+                try engine.start()
+                bridgedLog("   ✅ Audio engine started successfully")
+                bridgedLog("   ✅ Engine restart completed successfully")
+            } catch {
+                // If restart fails with format error (2003329396 = kAudioFormatUnsupportedDataFormatError),
+                // the engine's format configuration is likely stale/invalid after interruption
+                let nsError = error as NSError
+                let errorCode = nsError.code
+                
+                bridgedLog("   ❌ Engine start failed: \(error.localizedDescription) (code: \(errorCode))")
+                
+                if errorCode == 2003329396 { // kAudioFormatUnsupportedDataFormatError
+                    bridgedLog("   ⚠️ Format error detected (2003329396) - engine format is stale/invalid")
+                    bridgedLog("   🔧 Destroying engine for full reinitialize...")
+                    // Destroy the engine instance so initializeAudioEngine() creates a fresh one
+                    // This ensures we get a clean format configuration on next operation
+                    audioEngine = nil
+                    audioPlayerNodeA = nil
+                    audioPlayerNodeB = nil
+                    audioPlayerNodeC = nil
+                    audioEngineInitialized = false
+                    bridgedLog("   ✅ Engine destroyed - will reinitialize on next operation")
+                    // Don't throw - allow graceful degradation, next operation will fully reinitialize
+                } else {
+                    // Re-throw other errors (they might be recoverable)
+                    bridgedLog("   ❌ Engine restart failed with non-format error - rethrowing")
+                    throw error
+                }
+            }
+        } else {
+            bridgedLog("   ℹ️ Engine already running - no restart needed")
+            bridgedLog("   ✅ Engine restart check completed")
         }
     }
 
@@ -215,54 +596,135 @@ import Speech
 
     private func initializeAudioEngine() throws {
         guard !audioEngineInitialized else {
+            bridgedLog("ℹ️ Engine already initialized - skipping initialization")
             return
+        }
+
+        bridgedLog("🔧 Starting audio engine initialization...")
+        logStateSnapshot(context: "before-engine-init")
+        
+        // Check if we're initializing during active recording (shouldn't happen, but log it)
+        let modeDescription: String
+        switch currentMode {
+        case .idle:
+            modeDescription = "idle"
+        case .manual:
+            modeDescription = "manual"
+        case .autoVAD:
+            modeDescription = "autoVAD"
+        }
+        let hasActiveSegment = currentSegmentFile != nil
+        if currentMode != .idle || hasActiveSegment {
+            bridgedLog("   ⚠️ WARNING: Initializing engine during active recording session!")
+            bridgedLog("   ⚠️ Recording mode: \(modeDescription), segmentActive: \(hasActiveSegment)")
         }
 
         // Setup audio session ONCE for recording + playback
         let audioSession = AVAudioSession.sharedInstance()
+        
+        // Log current session state
+        let currentRoute = audioSession.currentRoute
+        bridgedLog("   📡 Current session state:")
+        bridgedLog("      Category: \(audioSession.category.rawValue)")
+        bridgedLog("      Route: [\(currentRoute.outputs.map { $0.portName }.joined(separator: ", "))]")
+        bridgedLog("      Sample rate: \(audioSession.sampleRate)Hz")
+        bridgedLog("      Input channels: \(audioSession.inputNumberOfChannels)")
+        
+        // Configure session category and settings first
+        bridgedLog("   🔧 Step 1: Configuring audio session...")
         try audioSession.setCategory(.playAndRecord,
                                     mode: .default,
                                     options: [.defaultToSpeaker, .allowBluetooth])
+        bridgedLog("   ✅ Session category set: .playAndRecord")
+        
         try audioSession.setPreferredSampleRate(44100)
+        bridgedLog("   ✅ Preferred sample rate set: 44100Hz")
+        
         // Only set mono input if hardware supports it
         if audioSession.maximumInputNumberOfChannels >= 1 {
             try? audioSession.setPreferredInputNumberOfChannels(1)
+            bridgedLog("   ✅ Preferred input channels set: 1 (mono)")
+        } else {
+            bridgedLog("   ℹ️ Hardware doesn't support mono input - using default")
         }
+        
         try audioSession.setPreferredIOBufferDuration(0.0232) // ~23ms
-        try audioSession.setActive(true)
+        bridgedLog("   ✅ Preferred I/O buffer duration set: 0.0232s (~23ms)")
+        
+        // Activate session - CRITICAL: This must succeed for engine to work
+        // If this fails (e.g., in background), we throw so caller knows to retry when app wakes
+        bridgedLog("   🔧 Step 2: Activating audio session...")
+        do {
+            try audioSession.setActive(true)
+            bridgedLog("   ✅ Audio session activated successfully")
+        } catch {
+            // Session activation failed - this means we can't use audio right now
+            // This can happen if app is suspended in background after interruption
+            // The caller (alarm/silent loop) should retry when app wakes up
+            let nsError = error as NSError
+            bridgedLog("   ❌ Session activation failed: \(error.localizedDescription) (code: \(nsError.code))")
+            bridgedLog("   ⚠️ This may happen if app is suspended in background")
+            bridgedLog("   ⚠️ Will need to retry when app wakes (alarm will trigger this)")
+            throw RuntimeError.error(withMessage: "Audio session activation failed - app may be suspended. Retry when app wakes: \(error.localizedDescription)")
+        }
 
         // Create the unified audio engine
+        bridgedLog("   🔧 Step 3: Creating audio engine...")
         audioEngine = AVAudioEngine()
+        guard let engine = audioEngine else {
+            throw RuntimeError.error(withMessage: "Failed to create audio engine")
+        }
+        bridgedLog("   ✅ Audio engine created")
 
         // Create player nodes for crossfading support
+        bridgedLog("   🔧 Step 4: Creating player nodes...")
         audioPlayerNodeA = AVAudioPlayerNode()
         audioPlayerNodeB = AVAudioPlayerNode()
         audioPlayerNodeC = AVAudioPlayerNode()
+        bridgedLog("   ✅ Player nodes created (A, B, C)")
 
         // Attach nodes to engine
-        guard let engine = audioEngine,
-            let playerA = audioPlayerNodeA,
+        guard let playerA = audioPlayerNodeA,
             let playerB = audioPlayerNodeB,
             let playerC = audioPlayerNodeC else {
             throw RuntimeError.error(withMessage: "Failed to create audio engine components")
         }
 
+        bridgedLog("   🔧 Step 5: Attaching nodes to engine...")
         engine.attach(playerA)
         engine.attach(playerB)
         engine.attach(playerC)
+        bridgedLog("   ✅ All player nodes attached")
 
         // Connect player nodes to main mixer
+        bridgedLog("   🔧 Step 6: Connecting nodes to mixer...")
         let mainMixer = engine.mainMixerNode
         engine.connect(playerA, to: mainMixer, format: nil)
         engine.connect(playerB, to: mainMixer, format: nil)
         engine.connect(playerC, to: mainMixer, format: nil)
+        bridgedLog("   ✅ All player nodes connected to main mixer")
 
         // Force input node initialization by accessing it (required for .playAndRecord)
-        let _ = engine.inputNode
+        bridgedLog("   🔧 Step 7: Initializing input node...")
+        let inputNode = engine.inputNode
+        let inputFormat = inputNode.outputFormat(forBus: 0)
+        bridgedLog("   ✅ Input node initialized")
+        bridgedLog("      Input format: \(Int(inputFormat.sampleRate))Hz, \(inputFormat.channelCount) channels")
 
         // Now safe to start engine with both input and output configured
-        try engine.start()
-        audioEngineInitialized = true
+        bridgedLog("   🔧 Step 8: Starting audio engine...")
+        do {
+            try engine.start()
+            audioEngineInitialized = true
+            bridgedLog("   ✅ Audio engine started successfully")
+            bridgedLog("✅ Engine initialization completed successfully")
+            logStateSnapshot(context: "after-engine-init")
+        } catch {
+            let nsError = error as NSError
+            bridgedLog("   ❌ Engine start failed: \(error.localizedDescription) (code: \(nsError.code))")
+            audioEngineInitialized = false
+            throw error
+        }
     }
 
 
@@ -1968,6 +2430,10 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                         currentNode.volume = 0.0  // Ensure volume stays at 0
                     }
                 }
+
+                // BUGFIX: Update playbackVolume to match target for subsequent loop iterations
+                self.playbackVolume = finalVolume
+
                 self.fadeVolume(node: newNode, from: 0.0, to: finalVolume, duration: fadeDuration) {
                     // Swap references after new node fades in
                     self.currentPlayerNode = newNode
