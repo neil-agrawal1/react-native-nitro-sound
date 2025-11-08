@@ -1264,12 +1264,11 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
 
         bridgedLog("🔧 [2/5] Promise created, dispatching to queue...")
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            bridgedLog("🔧 [3/5] Inside async block - starting mode switch")
             guard let self = self else {
-                bridgedLog("❌ [FAIL] Self is nil in setManualMode")
                 promise.reject(withError: RuntimeError.error(withMessage: "Self is nil"))
                 return
             }
+            self.bridgedLog("🔧 [3/5] Inside async block - starting mode switch")
 
             // Force close any existing segment (might be from auto detection)
             // Close synchronously WITHOUT callback to avoid promise lifetime issues
@@ -1285,9 +1284,9 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
             self.silenceFrameCount = 0
             self.manualSilenceFrameCount = 0  // Reset manual silence counter
 
-            bridgedLog("🔧 [4/5] Mode flags set, resolving promise...")
+            self.bridgedLog("🔧 [4/5] Mode flags set, resolving promise...")
             promise.resolve(withResult: ())
-            bridgedLog("🔧 [5/5] setManualMode() completed successfully")
+            self.bridgedLog("🔧 [5/5] setManualMode() completed successfully")
         }
 
         bridgedLog("🔧 Returning promise from setManualMode()")
@@ -1368,12 +1367,11 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
 
         bridgedLog("🔧 [2/5] Promise created, dispatching to queue...")
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            bridgedLog("🔧 [3/5] Inside async block - starting mode switch")
             guard let self = self else {
-                bridgedLog("❌ [FAIL] Self is nil in setIdleMode")
                 promise.reject(withError: RuntimeError.error(withMessage: "Self is nil"))
                 return
             }
+            self.bridgedLog("🔧 [3/5] Inside async block - starting mode switch")
 
             // End any current segment before switching to idle
             if self.currentSegmentFile != nil {
@@ -1384,9 +1382,9 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
             // Switch to idle mode (keeps tap active for quick resume)
             self.currentMode = .idle
 
-            bridgedLog("🔧 [4/5] Mode flags set, resolving promise...")
+            self.bridgedLog("🔧 [4/5] Mode flags set, resolving promise...")
             promise.resolve(withResult: ())
-            bridgedLog("🔧 [5/5] setIdleMode() completed successfully")
+            self.bridgedLog("🔧 [5/5] setIdleMode() completed successfully")
         }
 
         bridgedLog("🔧 Returning promise from setIdleMode()")
@@ -1399,12 +1397,11 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
 
         bridgedLog("🔧 [2/5] Promise created, dispatching to queue...")
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            bridgedLog("🔧 [3/5] Inside async block - starting mode switch")
             guard let self = self else {
-                bridgedLog("❌ [FAIL] Self is nil in setVADMode")
                 promise.reject(withError: RuntimeError.error(withMessage: "Self is nil"))
                 return
             }
+            self.bridgedLog("🔧 [3/5] Inside async block - starting mode switch")
 
             // End any current segment before mode switch
             if self.currentSegmentFile != nil {
@@ -1420,9 +1417,9 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
             // Reset VAD state to fresh initial state (prevents false positives from stale data)
             self.vadStreamState = VadStreamState.initial()
 
-            bridgedLog("🔧 [4/5] Mode flags set, resolving promise...")
+            self.bridgedLog("🔧 [4/5] Mode flags set, resolving promise...")
             promise.resolve(withResult: ())
-            bridgedLog("🔧 [5/5] setVADMode() completed successfully")
+            self.bridgedLog("🔧 [5/5] setVADMode() completed successfully")
         }
 
         bridgedLog("🔧 Returning promise from setVADMode()")
