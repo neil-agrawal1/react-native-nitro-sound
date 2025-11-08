@@ -183,6 +183,7 @@ import Speech
             let shouldResume = (userInfo[AVAudioSessionInterruptionOptionKey] as? UInt) == AVAudioSession.InterruptionOptions.shouldResume.rawValue
             
             bridgedLog("🔊 Audio interruption ended (shouldResume: \(shouldResume))")
+            logStateSnapshot(context: "interruption-ended")
             
             // CRITICAL: If audio was playing (silent loop, ambient loop, or regular playback),
             // we need to restart it to keep the session active (like Spotify does)
@@ -198,6 +199,7 @@ import Speech
                     try restartAudioEngine()
                     sessionReactivated = true
                     bridgedLog("✅ Engine restart succeeded")
+                    logStateSnapshot(context: "after-restart-success")
                     
                     // Resume playback if we were playing before interruption
                     // This keeps the session active, preventing deactivation (like Spotify)
@@ -269,6 +271,7 @@ import Speech
                     bridgedLog("❌ Engine restart failed during interruption recovery")
                     bridgedLog("   Error: \(error.localizedDescription)")
                     bridgedLog("   Error code: \(errorCode)")
+                    logStateSnapshot(context: "after-restart-failure")
                     // Don't crash - next operation will handle reinitialization
                 }
             } else {
@@ -276,10 +279,37 @@ import Speech
             }
         } else if type == .began {
             bridgedLog("🔇 Audio interruption began")
+            logStateSnapshot(context: "interruption-began")
             // Engine will be stopped automatically by iOS
             // Player nodes will also stop automatically
             bridgedLog("   Engine and players will be stopped automatically by iOS")
         }
+    }
+
+    // MARK: - Debug Logging Helper
+
+    private func logStateSnapshot(context: String) {
+        let session = AVAudioSession.sharedInstance()
+
+        // Recording state
+        let mode = currentMode == .idle ? "idle" : (currentMode == .manual ? "manual" : "vad")
+        let hasTap = audioEngine?.inputNode.engine != nil
+        let hasSegment = currentSegmentFile != nil
+
+        // Engine state
+        let engineInit = audioEngineInitialized
+        let engineRun = audioEngine?.isRunning ?? false
+
+        // Session state
+        let category = session.category.rawValue
+        let route = session.currentRoute.outputs.map { $0.portName }.joined(separator: ", ")
+        let sampleRate = Int(session.sampleRate)
+
+        bridgedLog("📊 STATE SNAPSHOT [\(context)]:")
+        bridgedLog("   🎙️ Recording: mode=\(mode), tap=\(hasTap), segment=\(hasSegment)")
+        bridgedLog("   🔧 Engine: init=\(engineInit), running=\(engineRun)")
+        bridgedLog("   🔊 Playback: loop=\(shouldLoopPlayback), ambient=\(isAmbientLoopPlaying)")
+        bridgedLog("   📡 Session: \(category), \(sampleRate)Hz, route=[\(route)]")
     }
 
     private func restartAudioEngine() throws {
@@ -1229,10 +1259,14 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
     // MARK: - Mode Control Methods
 
     public func setManualMode() throws -> Promise<Void> {
+        bridgedLog("🔧 [1/5] setManualMode() called")
         let promise = Promise<Void>()
 
+        bridgedLog("🔧 [2/5] Promise created, dispatching to queue...")
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            bridgedLog("🔧 [3/5] Inside async block - starting mode switch")
             guard let self = self else {
+                bridgedLog("❌ [FAIL] Self is nil in setManualMode")
                 promise.reject(withError: RuntimeError.error(withMessage: "Self is nil"))
                 return
             }
@@ -1251,9 +1285,12 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
             self.silenceFrameCount = 0
             self.manualSilenceFrameCount = 0  // Reset manual silence counter
 
+            bridgedLog("🔧 [4/5] Mode flags set, resolving promise...")
             promise.resolve(withResult: ())
+            bridgedLog("🔧 [5/5] setManualMode() completed successfully")
         }
 
+        bridgedLog("🔧 Returning promise from setManualMode()")
         return promise
     }
 
@@ -1326,39 +1363,52 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
     }
 
     public func setIdleMode() throws -> Promise<Void> {
+        bridgedLog("🔧 [1/5] setIdleMode() called")
         let promise = Promise<Void>()
 
+        bridgedLog("🔧 [2/5] Promise created, dispatching to queue...")
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            bridgedLog("🔧 [3/5] Inside async block - starting mode switch")
             guard let self = self else {
+                bridgedLog("❌ [FAIL] Self is nil in setIdleMode")
                 promise.reject(withError: RuntimeError.error(withMessage: "Self is nil"))
                 return
             }
 
             // End any current segment before switching to idle
             if self.currentSegmentFile != nil {
+                self.bridgedLog("⚠️ Closing existing segment before idle mode")
                 self.endCurrentSegment()
             }
 
             // Switch to idle mode (keeps tap active for quick resume)
             self.currentMode = .idle
 
+            bridgedLog("🔧 [4/5] Mode flags set, resolving promise...")
             promise.resolve(withResult: ())
+            bridgedLog("🔧 [5/5] setIdleMode() completed successfully")
         }
 
+        bridgedLog("🔧 Returning promise from setIdleMode()")
         return promise
     }
 
     public func setVADMode() throws -> Promise<Void> {
+        bridgedLog("🔧 [1/5] setVADMode() called")
         let promise = Promise<Void>()
 
+        bridgedLog("🔧 [2/5] Promise created, dispatching to queue...")
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            bridgedLog("🔧 [3/5] Inside async block - starting mode switch")
             guard let self = self else {
+                bridgedLog("❌ [FAIL] Self is nil in setVADMode")
                 promise.reject(withError: RuntimeError.error(withMessage: "Self is nil"))
                 return
             }
 
             // End any current segment before mode switch
             if self.currentSegmentFile != nil {
+                self.bridgedLog("⚠️ Closing existing segment before VAD mode")
                 self.endCurrentSegment()
             }
 
@@ -1370,9 +1420,12 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
             // Reset VAD state to fresh initial state (prevents false positives from stale data)
             self.vadStreamState = VadStreamState.initial()
 
+            bridgedLog("🔧 [4/5] Mode flags set, resolving promise...")
             promise.resolve(withResult: ())
+            bridgedLog("🔧 [5/5] setVADMode() completed successfully")
         }
 
+        bridgedLog("🔧 Returning promise from setVADMode()")
         return promise
     }
 
