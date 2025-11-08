@@ -169,16 +169,6 @@ import Speech
             name: AVAudioSession.interruptionNotification,
             object: AVAudioSession.sharedInstance()
         )
-        
-        // Handle audio route changes (headphones, Bluetooth, etc.)
-        // CRITICAL: Route changes can change hardware format, causing format errors
-        // We need to reinitialize the engine when routes change
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(handleRouteChange),
-            name: AVAudioSession.routeChangeNotification,
-            object: AVAudioSession.sharedInstance()
-        )
     }
 
     @objc private func handleAudioInterruption(notification: Notification) {
@@ -193,7 +183,6 @@ import Speech
             let shouldResume = (userInfo[AVAudioSessionInterruptionOptionKey] as? UInt) == AVAudioSession.InterruptionOptions.shouldResume.rawValue
             
             bridgedLog("🔊 Audio interruption ended (shouldResume: \(shouldResume))")
-            logStateSnapshot(context: "interruption-ended")
             
             // CRITICAL: If audio was playing (silent loop, ambient loop, or regular playback),
             // we need to restart it to keep the session active (like Spotify does)
@@ -209,7 +198,6 @@ import Speech
                     try restartAudioEngine()
                     sessionReactivated = true
                     bridgedLog("✅ Engine restart succeeded")
-                    logStateSnapshot(context: "after-restart-success")
                     
                     // Resume playback if we were playing before interruption
                     // This keeps the session active, preventing deactivation (like Spotify)
@@ -269,7 +257,6 @@ import Speech
                         }
                         
                         bridgedLog("🔄 Playback resume attempt completed")
-                        logStateSnapshot(context: "after-playback-resume")
                     } else {
                         bridgedLog("⚠️ Not resuming playback: shouldResume=\(shouldResume), sessionReactivated=\(sessionReactivated)")
                     }
@@ -282,15 +269,6 @@ import Speech
                     bridgedLog("❌ Engine restart failed during interruption recovery")
                     bridgedLog("   Error: \(error.localizedDescription)")
                     bridgedLog("   Error code: \(errorCode)")
-                    logStateSnapshot(context: "after-restart-failure")
-                    
-                    if errorCode == 2003329396 { // kAudioFormatUnsupportedDataFormatError
-                        bridgedLog("⚠️ Background reactivation failed (format error) - destroying engine for reinitialize")
-                        // Destroy engine so next operation fully reinitializes
-                        destroyEngineForReinitialize()
-                    } else {
-                        bridgedLog("❌ Failed to restart engine: \(error.localizedDescription) (code: \(errorCode))")
-                    }
                     // Don't crash - next operation will handle reinitialization
                 }
             } else {
@@ -298,210 +276,10 @@ import Speech
             }
         } else if type == .began {
             bridgedLog("🔇 Audio interruption began")
-            logStateSnapshot(context: "interruption-began")
             // Engine will be stopped automatically by iOS
             // Player nodes will also stop automatically
             bridgedLog("   Engine and players will be stopped automatically by iOS")
         }
-    }
-    
-    @objc private func handleRouteChange(notification: Notification) {
-        guard let userInfo = notification.userInfo,
-              let reasonValue = userInfo[AVAudioSessionRouteChangeReasonKey] as? UInt,
-              let reason = AVAudioSession.RouteChangeReason(rawValue: reasonValue) else {
-            bridgedLog("⚠️ Route change notification received but missing required info")
-            return
-        }
-        
-        let audioSession = AVAudioSession.sharedInstance()
-        let currentRoute = audioSession.currentRoute
-        
-        // Get previous route if available
-        let previousRoute = userInfo[AVAudioSessionRouteChangePreviousRouteKey] as? AVAudioSessionRouteDescription
-        let previousOutputs = previousRoute?.outputs.map { $0.portName }.joined(separator: ", ") ?? "unknown"
-        
-        bridgedLog("🔌 Audio route changed: \(routeChangeReasonDescription(reason))")
-        bridgedLog("   Previous route outputs: [\(previousOutputs)]")
-        bridgedLog("   Current route outputs: [\(currentRoute.outputs.map { $0.portName }.joined(separator: ", "))]")
-        
-        logStateSnapshot(context: "route-change-\(routeChangeReasonDescription(reason))")
-        
-        // Route changes can change hardware format (sample rate, buffer duration, channels)
-        // This causes format errors if we try to use the old format
-        // We need to destroy and reinitialize the engine with the new format
-        
-        switch reason {
-        case .newDeviceAvailable:
-            bridgedLog("   ⚠️ New device available - format may have changed, destroying engine")
-            bridgedLog("   ⚠️ CRITICAL: This will remove mic tap - may not be reinstallable if phone is locked")
-            // New device connected - format might have changed
-            destroyEngineForReinitialize()
-            
-        case .oldDeviceUnavailable:
-            bridgedLog("   ⚠️ Old device removed - format definitely changed, destroying engine")
-            bridgedLog("   ⚠️ CRITICAL: This will remove mic tap - may not be reinstallable if phone is locked")
-            // Device removed - format definitely changed
-            destroyEngineForReinitialize()
-            
-        case .categoryChange:
-            bridgedLog("   ⚠️ Category changed - format may be affected, destroying engine")
-            bridgedLog("   ⚠️ CRITICAL: This will remove mic tap - may not be reinstallable if phone is locked")
-            // Category change can affect format
-            destroyEngineForReinitialize()
-            
-        case .override:
-            // Route override (e.g., AirPlay) - don't destroy engine
-            // According to Apple docs, we should NOT pause playback on override
-            bridgedLog("   ✅ Route override - keeping engine (no pause needed per Apple docs)")
-            bridgedLog("   No engine destruction needed for override")
-            
-        case .wakeFromSleep:
-            bridgedLog("   ⚠️ Woke from sleep - format may have changed, destroying engine")
-            bridgedLog("   ⚠️ CRITICAL: This will remove mic tap - may not be reinstallable if phone is locked")
-            // Device woke up - format might have changed
-            destroyEngineForReinitialize()
-            
-        case .noSuitableRouteForCategory:
-            bridgedLog("   ⚠️ No suitable route - destroying engine, will reinitialize when route available")
-            bridgedLog("   ⚠️ CRITICAL: This will remove mic tap - may not be reinstallable if phone is locked")
-            // No route available - destroy engine, will reinitialize when route available
-            destroyEngineForReinitialize()
-            
-        default:
-            bridgedLog("   ⚠️ Unknown route change reason - destroying engine to be safe")
-            bridgedLog("   ⚠️ CRITICAL: This will remove mic tap - may not be reinstallable if phone is locked")
-            destroyEngineForReinitialize()
-        }
-        
-        bridgedLog("🔌 Route change handling completed")
-        logStateSnapshot(context: "after-route-change")
-    }
-    
-    private func destroyEngineForReinitialize() {
-        // Destroy engine instance so it gets recreated with fresh format on next operation
-        // This prevents format errors when hardware format changes
-        if audioEngineInitialized {
-            bridgedLog("🔧 Starting engine destruction for format reinitialization")
-            logStateSnapshot(context: "before-engine-destruction")
-            
-            // Log critical state before destruction
-            let modeDescription: String
-            switch currentMode {
-            case .idle:
-                modeDescription = "idle"
-            case .manual:
-                modeDescription = "manual"
-            case .autoVAD:
-                modeDescription = "autoVAD"
-            }
-            let hasMicTap = audioEngine?.inputNode.engine != nil
-            let hasActiveSegment = currentSegmentFile != nil
-            
-            bridgedLog("   🎙️ Current recording state: mode=\(modeDescription), segmentActive=\(hasActiveSegment), micTapExists=\(hasMicTap)")
-            bridgedLog("   🔊 Current playback state: looping=\(shouldLoopPlayback), ambient=\(isAmbientLoopPlaying)")
-            bridgedLog("   🔧 Engine state: running=\(audioEngine?.isRunning ?? false)")
-            
-            if hasMicTap {
-                bridgedLog("   ⚠️⚠️⚠️ WARNING: Mic tap is active - removing it now!")
-                bridgedLog("   ⚠️⚠️⚠️ CRITICAL: Mic tap CANNOT be reinstalled when phone is locked!")
-                bridgedLog("   ⚠️⚠️⚠️ Recording will STOP and may not resume until app wakes!")
-            }
-            
-            if hasActiveSegment {
-                bridgedLog("   ⚠️ WARNING: Active segment exists - will be lost when engine destroyed")
-            }
-            
-            // Step 1: Stop engine if running
-            if let engine = audioEngine, engine.isRunning {
-                bridgedLog("   🔧 Step 1: Stopping engine...")
-                engine.stop()
-                bridgedLog("   ✅ Engine stopped")
-            } else {
-                bridgedLog("   ℹ️ Engine not running - skipping stop")
-            }
-            
-            // Step 2: Remove tap if active
-            if let engine = audioEngine {
-                bridgedLog("   🔧 Step 2: Removing microphone tap...")
-                engine.inputNode.removeTap(onBus: 0)
-                bridgedLog("   ✅ Microphone tap removed")
-                if hasMicTap {
-                    bridgedLog("   ⚠️⚠️⚠️ MIC TAP REMOVED - Recording capability lost!")
-                }
-            } else {
-                bridgedLog("   ℹ️ No engine instance - skipping tap removal")
-            }
-            
-            // Step 3: Destroy engine and nodes
-            bridgedLog("   🔧 Step 3: Destroying engine and player nodes...")
-            audioEngine = nil
-            audioPlayerNodeA = nil
-            audioPlayerNodeB = nil
-            audioPlayerNodeC = nil
-            bridgedLog("   ✅ Engine and nodes destroyed")
-            
-            // Step 4: Reset flag so next operation fully reinitializes
-            audioEngineInitialized = false
-            bridgedLog("   ✅ Initialization flag reset")
-            
-            bridgedLog("✅ Engine destruction completed")
-            bridgedLog("   Next audio operation will fully reinitialize engine with new format")
-            if hasMicTap {
-                bridgedLog("   ⚠️⚠️⚠️ REMINDER: Mic tap was removed - may not be reinstallable if phone is locked!")
-            }
-            logStateSnapshot(context: "after-engine-destruction")
-        } else {
-            bridgedLog("ℹ️ Engine not initialized - nothing to destroy")
-        }
-    }
-    
-    private func routeChangeReasonDescription(_ reason: AVAudioSession.RouteChangeReason) -> String {
-        switch reason {
-        case .newDeviceAvailable:
-            return "newDeviceAvailable"
-        case .oldDeviceUnavailable:
-            return "oldDeviceUnavailable"
-        case .categoryChange:
-            return "categoryChange"
-        case .override:
-            return "override"
-        case .wakeFromSleep:
-            return "wakeFromSleep"
-        case .noSuitableRouteForCategory:
-            return "noSuitableRouteForCategory"
-        @unknown default:
-            return "unknown(\(reason.rawValue))"
-        }
-    }
-    
-    // MARK: - State Snapshot Helper
-    
-    private func logStateSnapshot(context: String) {
-        let audioSession = AVAudioSession.sharedInstance()
-        let sessionCategory = audioSession.category.rawValue
-        let currentRoute = audioSession.currentRoute
-        let routeOutputs = currentRoute.outputs.map { $0.portName }.joined(separator: ", ")
-        let sampleRate = audioSession.sampleRate
-        
-        let modeDescription: String
-        switch currentMode {
-        case .idle:
-            modeDescription = "idle"
-        case .manual:
-            modeDescription = "manual"
-        case .autoVAD:
-            modeDescription = "autoVAD"
-        }
-        
-        let micTapActive = audioEngine?.inputNode.engine != nil
-        let segmentActive = currentSegmentFile != nil
-        let engineRunning = audioEngine?.isRunning ?? false
-        
-        bridgedLog("📊 STATE SNAPSHOT [\(context)]:")
-        bridgedLog("   🎙️ Recording: mode=\(modeDescription), segmentActive=\(segmentActive), micTapActive=\(micTapActive)")
-        bridgedLog("   🔊 Playback: looping=\(shouldLoopPlayback), ambient=\(isAmbientLoopPlaying), uri=\(currentPlaybackURI ?? "none")")
-        bridgedLog("   🔧 Engine: initialized=\(audioEngineInitialized), running=\(engineRunning)")
-        bridgedLog("   📡 Session: category=\(sessionCategory), sampleRate=\(Int(sampleRate))Hz, route=[\(routeOutputs)]")
     }
 
     private func restartAudioEngine() throws {
