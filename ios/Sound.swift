@@ -2255,6 +2255,14 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
 
                 newNode.play()
 
+                // Schedule seamless loop timer immediately (synchronized with playback start)
+                // This must happen BEFORE crossfade completes, so timer is synchronized with actual playback
+                if self.shouldLoopPlayback {
+                    let totalDuration = Double(audioFile.length) / audioFile.fileFormat.sampleRate
+                    let crossfadeStartTime = max(0, totalDuration - self.loopCrossfadeDuration)
+                    self.scheduleLoopCrossfade(after: crossfadeStartTime, audioFile: audioFile, url: url)
+                }
+
                 // Start fading
                 if let currentNode = self.currentPlayerNode {
                     self.fadeVolume(node: currentNode, from: 1.0, to: 0.0, duration: fadeDuration) {
@@ -2272,12 +2280,8 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                     self.currentPlayerNode = newNode
                     self.activePlayer = (newNode == self.audioPlayerNodeA) ? .playerA : .playerB
 
-                    // Start seamless loop timer if looping is enabled
-                    if self.shouldLoopPlayback {
-                        let totalDuration = Double(audioFile.length) / audioFile.fileFormat.sampleRate
-                        let crossfadeStartTime = max(0, totalDuration - self.loopCrossfadeDuration)
-                        self.scheduleLoopCrossfade(after: crossfadeStartTime, audioFile: audioFile, url: url)
-                    }
+                    // Note: Seamless loop timer is already scheduled above (right after play())
+                    // to ensure it's synchronized with playback start time, not crossfade completion
                 }
 
                 // Resolve immediately (crossfade started)
