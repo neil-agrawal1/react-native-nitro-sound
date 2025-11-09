@@ -12,6 +12,7 @@ import Speech
     // Unified Audio Engine - single engine for recording and playback
     private var audioEngine: AVAudioEngine?
     private var audioEngineInitialized = false
+    private let engineInitLock = NSLock() // Thread-safe initialization guard
 
     // Dual player nodes for crossfading support
     private var audioPlayerNodeA: AVAudioPlayerNode?
@@ -403,6 +404,10 @@ import Speech
     }
 
     private func initializeAudioEngine() throws {
+        // Thread-safe initialization: serialize access to guard check and initialization
+        engineInitLock.lock()
+        defer { engineInitLock.unlock() }
+
         guard !audioEngineInitialized else {
             bridgedLog("ℹ️ Engine already initialized - skipping initialization")
             return
