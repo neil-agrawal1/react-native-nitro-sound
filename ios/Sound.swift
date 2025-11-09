@@ -1971,10 +1971,6 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
         let durationSeconds = getActualDurationSeconds(audioFile: audioFile)
         let durationMs = durationSeconds * 1000.0
 
-        if audioFile.url.pathExtension.lowercased() == "m4a" {
-            bridgedLog("⏱️ M4A duration via AVAsset: \(String(format: "%.2f", durationSeconds))s (excludes padding)")
-        }
-
         promise.resolve(withResult: durationMs)
         return promise
     }
