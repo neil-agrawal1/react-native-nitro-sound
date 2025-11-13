@@ -21,8 +21,12 @@ namespace margelo::nitro::sound { struct PlaybackEndType; }
 #include "RecordingMode.hpp"
 #include "JRecordingMode.hpp"
 #include <string>
-#include <optional>
+#include <NitroModules/Null.hpp>
+#include <variant>
+#include "JVariant_NullType_String.hpp"
+#include <NitroModules/JNull.hpp>
 #include <vector>
+#include <optional>
 #include <unordered_map>
 #include "RecordBackType.hpp"
 #include <functional>
@@ -87,6 +91,21 @@ namespace margelo::nitro::sound {
   }
   std::shared_ptr<Promise<void>> JHybridSoundSpec::stopRecorder() {
     static const auto method = javaClassStatic()->getMethod<jni::local_ref<JPromise::javaobject>()>("stopRecorder");
+    auto __result = method(_javaPart);
+    return [&]() {
+      auto __promise = Promise<void>::create();
+      __result->cthis()->addOnResolvedListener([=](const jni::alias_ref<jni::JObject>& /* unit */) {
+        __promise->resolve();
+      });
+      __result->cthis()->addOnRejectedListener([=](const jni::alias_ref<jni::JThrowable>& __throwable) {
+        jni::JniException __jniError(__throwable);
+        __promise->reject(std::make_exception_ptr(__jniError));
+      });
+      return __promise;
+    }();
+  }
+  std::shared_ptr<Promise<void>> JHybridSoundSpec::endEngineSession() {
+    static const auto method = javaClassStatic()->getMethod<jni::local_ref<JPromise::javaobject>()>("endEngineSession");
     auto __result = method(_javaPart);
     return [&]() {
       auto __promise = Promise<void>::create();
@@ -509,10 +528,10 @@ namespace margelo::nitro::sound {
     static const auto method = javaClassStatic()->getMethod<void(jni::alias_ref<jni::JString> /* message */)>("writeDebugLog");
     method(_javaPart, jni::make_jstring(message));
   }
-  std::optional<std::string> JHybridSoundSpec::getDebugLogPath() {
-    static const auto method = javaClassStatic()->getMethod<jni::local_ref<jni::JString>()>("getDebugLogPath");
+  std::variant<nitro::NullType, std::string> JHybridSoundSpec::getDebugLogPath() {
+    static const auto method = javaClassStatic()->getMethod<jni::local_ref<JVariant_NullType_String>()>("getDebugLogPath");
     auto __result = method(_javaPart);
-    return __result != nullptr ? std::make_optional(__result->toStdString()) : std::nullopt;
+    return __result->toCpp();
   }
   std::vector<std::string> JHybridSoundSpec::getAllDebugLogPaths() {
     static const auto method = javaClassStatic()->getMethod<jni::local_ref<jni::JArrayClass<jni::JString>>()>("getAllDebugLogPaths");
@@ -528,10 +547,10 @@ namespace margelo::nitro::sound {
       return __vector;
     }();
   }
-  std::optional<std::string> JHybridSoundSpec::readDebugLog(const std::optional<std::string>& path) {
-    static const auto method = javaClassStatic()->getMethod<jni::local_ref<jni::JString>(jni::alias_ref<jni::JString> /* path */)>("readDebugLog");
+  std::variant<nitro::NullType, std::string> JHybridSoundSpec::readDebugLog(const std::optional<std::string>& path) {
+    static const auto method = javaClassStatic()->getMethod<jni::local_ref<JVariant_NullType_String>(jni::alias_ref<jni::JString> /* path */)>("readDebugLog");
     auto __result = method(_javaPart, path.has_value() ? jni::make_jstring(path.value()) : nullptr);
-    return __result != nullptr ? std::make_optional(__result->toStdString()) : std::nullopt;
+    return __result->toCpp();
   }
   std::shared_ptr<Promise<void>> JHybridSoundSpec::clearDebugLogs() {
     static const auto method = javaClassStatic()->getMethod<jni::local_ref<JPromise::javaobject>()>("clearDebugLogs");

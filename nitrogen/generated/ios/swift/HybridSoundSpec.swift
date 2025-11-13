@@ -17,6 +17,7 @@ public protocol HybridSoundSpec_protocol: HybridObject {
   // Methods
   func startRecorder() throws -> Promise<Void>
   func stopRecorder() throws -> Promise<Void>
+  func endEngineSession() throws -> Promise<Void>
   func setVADMode() throws -> Promise<Void>
   func setManualMode() throws -> Promise<Void>
   func setIdleMode() throws -> Promise<Void>
@@ -51,9 +52,9 @@ public protocol HybridSoundSpec_protocol: HybridObject {
   func setSegmentCallback(callback: @escaping (_ filename: String, _ filePath: String, _ isManual: Bool, _ duration: Double) -> Void) throws -> Void
   func setManualSilenceCallback(callback: @escaping () -> Void) throws -> Void
   func writeDebugLog(message: String) throws -> Void
-  func getDebugLogPath() throws -> String?
+  func getDebugLogPath() throws -> Variant_NullType_String
   func getAllDebugLogPaths() throws -> [String]
-  func readDebugLog(path: String?) throws -> String?
+  func readDebugLog(path: String?) throws -> Variant_NullType_String
   func clearDebugLogs() throws -> Promise<Void>
   func mmss(secs: Double) throws -> String
   func mmssss(milisecs: Double) throws -> String

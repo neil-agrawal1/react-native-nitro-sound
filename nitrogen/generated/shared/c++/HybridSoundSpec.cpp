@@ -16,6 +16,7 @@ namespace margelo::nitro::sound {
     registerHybrids(this, [](Prototype& prototype) {
       prototype.registerHybridMethod("startRecorder", &HybridSoundSpec::startRecorder);
       prototype.registerHybridMethod("stopRecorder", &HybridSoundSpec::stopRecorder);
+      prototype.registerHybridMethod("endEngineSession", &HybridSoundSpec::endEngineSession);
       prototype.registerHybridMethod("setVADMode", &HybridSoundSpec::setVADMode);
       prototype.registerHybridMethod("setManualMode", &HybridSoundSpec::setManualMode);
       prototype.registerHybridMethod("setIdleMode", &HybridSoundSpec::setIdleMode);

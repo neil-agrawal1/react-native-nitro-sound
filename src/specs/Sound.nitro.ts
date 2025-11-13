@@ -71,6 +71,20 @@ export interface Sound
   startRecorder(): Promise<void>;
   stopRecorder(): Promise<void>;
 
+  /**
+   * End the engine session and completely destroy all audio resources.
+   * This performs a full teardown:
+   * - Ends any active recording segments
+   * - Stops all playback
+   * - Stops the audio engine
+   * - Deactivates the audio session (removes microphone indicator)
+   * - Destroys the engine instance (forces clean re-initialization)
+   *
+   * Call this when stopping a sleep session to ensure the microphone
+   * indicator disappears and all audio resources are released.
+   */
+  endEngineSession(): Promise<void>;
+
   // Segment mode control (for alarm-based manual recording)
   setVADMode(): Promise<void>;
   setManualMode(): Promise<void>;

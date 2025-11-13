@@ -25,6 +25,7 @@ namespace margelo::nitro::sound { enum class RecordingMode; }
 #include "PlaybackEndType.hpp"
 #include "RecordBackType.hpp"
 #include "RecordingMode.hpp"
+#include <NitroModules/Null.hpp>
 #include <NitroModules/Promise.hpp>
 #include <NitroModules/Result.hpp>
 #include <exception>
@@ -33,6 +34,7 @@ namespace margelo::nitro::sound { enum class RecordingMode; }
 #include <optional>
 #include <string>
 #include <unordered_map>
+#include <variant>
 #include <vector>
 
 // C++ helpers for Swift

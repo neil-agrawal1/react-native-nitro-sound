@@ -36,6 +36,7 @@ target_sources(
   ../nitrogen/generated/shared/c++/HybridSoundSpec.cpp
   # Android-specific Nitrogen C++ sources
   ../nitrogen/generated/android/c++/JHybridSoundSpec.cpp
+  ../nitrogen/generated/android/c++/JVariant_NullType_String.cpp
 )
 
 # From node_modules/react-native/ReactAndroid/cmake-utils/folly-flags.cmake

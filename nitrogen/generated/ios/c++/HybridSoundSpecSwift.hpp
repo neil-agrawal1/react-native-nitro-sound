@@ -30,6 +30,8 @@ namespace margelo::nitro::sound { struct PlaybackEndType; }
 #include <functional>
 #include "PlayBackType.hpp"
 #include "PlaybackEndType.hpp"
+#include <NitroModules/Null.hpp>
+#include <variant>
 #include <vector>
 
 #include "NitroSound-Swift-Cxx-Umbrella.hpp"
@@ -86,6 +88,14 @@ namespace margelo::nitro::sound {
     }
     inline std::shared_ptr<Promise<void>> stopRecorder() override {
       auto __result = _swiftPart.stopRecorder();
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+      auto __value = std::move(__result.value());
+      return __value;
+    }
+    inline std::shared_ptr<Promise<void>> endEngineSession() override {
+      auto __result = _swiftPart.endEngineSession();
       if (__result.hasError()) [[unlikely]] {
         std::rethrow_exception(__result.error());
       }
@@ -342,7 +352,7 @@ namespace margelo::nitro::sound {
         std::rethrow_exception(__result.error());
       }
     }
-    inline std::optional<std::string> getDebugLogPath() override {
+    inline std::variant<nitro::NullType, std::string> getDebugLogPath() override {
       auto __result = _swiftPart.getDebugLogPath();
       if (__result.hasError()) [[unlikely]] {
         std::rethrow_exception(__result.error());
@@ -358,7 +368,7 @@ namespace margelo::nitro::sound {
       auto __value = std::move(__result.value());
       return __value;
     }
-    inline std::optional<std::string> readDebugLog(const std::optional<std::string>& path) override {
+    inline std::variant<nitro::NullType, std::string> readDebugLog(const std::optional<std::string>& path) override {
       auto __result = _swiftPart.readDebugLog(path);
       if (__result.hasError()) [[unlikely]] {
         std::rethrow_exception(__result.error());

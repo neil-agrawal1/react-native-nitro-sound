@@ -1261,6 +1261,99 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
         return promise
     }
 
+    /**
+     * End the engine session and completely destroy all audio resources.
+     * This method performs a full teardown:
+     * - Ends any active recording segments
+     * - Stops all playback
+     * - Stops the audio engine
+     * - Deactivates the audio session (removes microphone indicator)
+     * - Destroys the engine instance (forces clean re-initialization)
+     *
+     * Call this when stopping a sleep session to ensure the microphone
+     * indicator disappears and all audio resources are released.
+     */
+    public func endEngineSession() throws -> Promise<Void> {
+        let promise = Promise<Void>()
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else {
+                promise.reject(withError: RuntimeError.error(withMessage: "Self is nil"))
+                return
+            }
+
+            self.bridgedLog("🔚 endEngineSession() called - full teardown")
+
+            // Step 1: End any active recording segments
+            if self.currentSegmentFile != nil {
+                self.bridgedLog("   Ending active recording segment...")
+                if let metadata = self.endCurrentSegmentWithoutCallback() {
+                    self.processAndFireSegmentCallback(metadata: metadata, trimSeconds: 0)
+                }
+            }
+
+            // Step 2: Stop all playback
+            self.bridgedLog("   Stopping all player nodes...")
+            self.currentPlayerNode?.stop()
+            self.audioPlayerNodeA?.stop()
+            self.audioPlayerNodeB?.stop()
+            self.audioPlayerNodeC?.stop()
+
+            // Step 3: Remove microphone tap
+            if let engine = self.audioEngine {
+                self.bridgedLog("   Removing microphone tap...")
+                engine.inputNode.removeTap(onBus: 0)
+            }
+
+            // Step 4: Stop the audio engine
+            if let engine = self.audioEngine, engine.isRunning {
+                self.bridgedLog("   Stopping audio engine...")
+                engine.stop()
+            }
+
+            // Step 5: Deactivate audio session (critical for removing mic indicator)
+            let audioSession = AVAudioSession.sharedInstance()
+            self.bridgedLog("   Deactivating audio session...")
+            do {
+                try audioSession.setActive(false, options: .notifyOthersOnDeactivation)
+                self.bridgedLog("   ✅ Audio session deactivated - mic indicator should disappear")
+            } catch {
+                self.bridgedLog("   ⚠️ Failed to deactivate session: \(error.localizedDescription)")
+                // Continue cleanup even if deactivation fails
+            }
+
+            // Step 6: Destroy engine instance (forces re-initialization on next session)
+            self.bridgedLog("   Destroying engine instance...")
+            self.audioEngine = nil
+            self.audioPlayerNodeA = nil
+            self.audioPlayerNodeB = nil
+            self.audioPlayerNodeC = nil
+            self.audioEngineInitialized = false
+
+            // Step 7: Clean up recording resources
+            self.currentSegmentFile = nil
+            self.vadManager = nil
+            self.vadStreamState = nil
+
+            // Step 8: Reset playback state
+            self.currentPlayerNode = nil
+            self.currentAudioFile = nil
+            self.currentAmbientFile = nil
+            self.isAmbientLoopPlaying = false
+            self.shouldLoopPlayback = false
+            self.currentPlaybackURI = nil
+
+            // Step 9: Reset mode
+            self.currentMode = .idle
+            self.segmentActive = false
+
+            self.bridgedLog("✅ endEngineSession() completed - all resources destroyed")
+            promise.resolve(withResult: ())
+        }
+
+        return promise
+    }
+
     // MARK: - Mode Control Methods
 
     public func setManualMode() throws -> Promise<Void> {
@@ -2024,9 +2117,6 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
     }
 
     private func bridgedLog(_ message: String) {
-        // Log to native console
-        NSLog("%@", message)
-
         // Log to file for debugging
         FileLogger.shared.log(message)
 
@@ -2035,6 +2125,9 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
             DispatchQueue.main.async {
                 callback(message)
             }
+        } else {
+            // Fallback: if no JS callback, log to native console
+            NSLog("%@", message)
         }
     }
 

@@ -56,6 +56,7 @@ namespace margelo::nitro::sound {
     // Methods
     std::shared_ptr<Promise<void>> startRecorder() override;
     std::shared_ptr<Promise<void>> stopRecorder() override;
+    std::shared_ptr<Promise<void>> endEngineSession() override;
     std::shared_ptr<Promise<void>> setVADMode() override;
     std::shared_ptr<Promise<void>> setManualMode() override;
     std::shared_ptr<Promise<void>> setIdleMode() override;
@@ -90,9 +91,9 @@ namespace margelo::nitro::sound {
     void setSegmentCallback(const std::function<void(const std::string& /* filename */, const std::string& /* filePath */, bool /* isManual */, double /* duration */)>& callback) override;
     void setManualSilenceCallback(const std::function<void()>& callback) override;
     void writeDebugLog(const std::string& message) override;
-    std::optional<std::string> getDebugLogPath() override;
+    std::variant<nitro::NullType, std::string> getDebugLogPath() override;
     std::vector<std::string> getAllDebugLogPaths() override;
-    std::optional<std::string> readDebugLog(const std::optional<std::string>& path) override;
+    std::variant<nitro::NullType, std::string> readDebugLog(const std::optional<std::string>& path) override;
     std::shared_ptr<Promise<void>> clearDebugLogs() override;
     std::string mmss(double secs) override;
     std::string mmssss(double milisecs) override;
