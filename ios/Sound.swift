@@ -1754,8 +1754,8 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
         let crossfadeStartTime = max(0, totalDuration - self.loopCrossfadeDuration)
         self.scheduleLoopCrossfade(after: crossfadeStartTime, audioFile: audioFile, url: url)
 
-        // Crossfade - respect current playback volume
-        self.fadeVolume(node: oldNode, from: self.playbackVolume, to: 0.0, duration: self.loopCrossfadeDuration) {
+        // Crossfade - use actual node volume, not stored playbackVolume
+        self.fadeVolume(node: oldNode, from: oldNode.volume, to: 0.0, duration: self.loopCrossfadeDuration) {
             oldNode.stop()
             oldNode.reset()
         }
