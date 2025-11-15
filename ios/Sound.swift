@@ -1345,7 +1345,6 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
 
             // Step 9: Reset mode
             self.currentMode = .idle
-            self.segmentActive = false
 
             self.bridgedLog("✅ endEngineSession() completed - all resources destroyed")
             promise.resolve(withResult: ())
