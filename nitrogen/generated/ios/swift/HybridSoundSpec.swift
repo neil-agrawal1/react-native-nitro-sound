@@ -52,9 +52,9 @@ public protocol HybridSoundSpec_protocol: HybridObject {
   func setSegmentCallback(callback: @escaping (_ filename: String, _ filePath: String, _ isManual: Bool, _ duration: Double) -> Void) throws -> Void
   func setManualSilenceCallback(callback: @escaping () -> Void) throws -> Void
   func writeDebugLog(message: String) throws -> Void
-  func getDebugLogPath() throws -> Variant_NullType_String
+  func getDebugLogPath() throws -> String
   func getAllDebugLogPaths() throws -> [String]
-  func readDebugLog(path: String?) throws -> Variant_NullType_String
+  func readDebugLog(path: String?) throws -> String
   func clearDebugLogs() throws -> Promise<Void>
   func mmss(secs: Double) throws -> String
   func mmssss(milisecs: Double) throws -> String

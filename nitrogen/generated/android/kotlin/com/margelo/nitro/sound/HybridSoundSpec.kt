@@ -11,7 +11,6 @@ import androidx.annotation.Keep
 import com.facebook.jni.HybridData
 import com.facebook.proguard.annotations.DoNotStrip
 import com.margelo.nitro.core.Promise
-import com.margelo.nitro.core.NullType
 import com.margelo.nitro.core.HybridObject
 
 /**
@@ -227,7 +226,7 @@ abstract class HybridSoundSpec: HybridObject() {
   
   @DoNotStrip
   @Keep
-  abstract fun getDebugLogPath(): Variant_NullType_String
+  abstract fun getDebugLogPath(): String
   
   @DoNotStrip
   @Keep
@@ -235,7 +234,7 @@ abstract class HybridSoundSpec: HybridObject() {
   
   @DoNotStrip
   @Keep
-  abstract fun readDebugLog(path: String?): Variant_NullType_String
+  abstract fun readDebugLog(path: String?): String
   
   @DoNotStrip
   @Keep

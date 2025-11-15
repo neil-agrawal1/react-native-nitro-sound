@@ -2135,19 +2135,19 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
         FileLogger.shared.log(message)
     }
 
-    public func getDebugLogPath() throws -> String? {
-        return FileLogger.shared.getCurrentLogPath()
+    public func getDebugLogPath() throws -> String {
+        return FileLogger.shared.getCurrentLogPath() ?? ""
     }
 
     public func getAllDebugLogPaths() throws -> [String] {
         return FileLogger.shared.getAllLogPaths()
     }
 
-    public func readDebugLog(path: String?) throws -> String? {
+    public func readDebugLog(path: String?) throws -> String {
         if let path = path {
-            return FileLogger.shared.readLog(at: path)
+            return FileLogger.shared.readLog(at: path) ?? ""
         } else {
-            return FileLogger.shared.readCurrentLog()
+            return FileLogger.shared.readCurrentLog() ?? ""
         }
     }
 

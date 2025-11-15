@@ -157,9 +157,9 @@ export interface Sound
 
   // Debug logging methods
   writeDebugLog(message: string): void;
-  getDebugLogPath(): string | null;
+  getDebugLogPath(): string;
   getAllDebugLogPaths(): string[];
-  readDebugLog(path?: string): string | null;
+  readDebugLog(path?: string): string;
   clearDebugLogs(): Promise<void>;
 
   // Utility methods

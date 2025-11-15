@@ -106,9 +106,9 @@ export interface Sound extends HybridObject<{
     setSegmentCallback(callback: (filename: string, filePath: string, isManual: boolean, duration: number) => void): void;
     setManualSilenceCallback(callback: () => void): void;
     writeDebugLog(message: string): void;
-    getDebugLogPath(): string | null;
+    getDebugLogPath(): string;
     getAllDebugLogPaths(): string[];
-    readDebugLog(path?: string): string | null;
+    readDebugLog(path?: string): string;
     clearDebugLogs(): Promise<void>;
     mmss(secs: number): string;
     mmssss(milisecs: number): string;

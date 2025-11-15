@@ -21,10 +21,6 @@ namespace margelo::nitro::sound { struct PlaybackEndType; }
 #include "RecordingMode.hpp"
 #include "JRecordingMode.hpp"
 #include <string>
-#include <NitroModules/Null.hpp>
-#include <variant>
-#include "JVariant_NullType_String.hpp"
-#include <NitroModules/JNull.hpp>
 #include <vector>
 #include <optional>
 #include <unordered_map>
@@ -528,10 +524,10 @@ namespace margelo::nitro::sound {
     static const auto method = javaClassStatic()->getMethod<void(jni::alias_ref<jni::JString> /* message */)>("writeDebugLog");
     method(_javaPart, jni::make_jstring(message));
   }
-  std::variant<nitro::NullType, std::string> JHybridSoundSpec::getDebugLogPath() {
-    static const auto method = javaClassStatic()->getMethod<jni::local_ref<JVariant_NullType_String>()>("getDebugLogPath");
+  std::string JHybridSoundSpec::getDebugLogPath() {
+    static const auto method = javaClassStatic()->getMethod<jni::local_ref<jni::JString>()>("getDebugLogPath");
     auto __result = method(_javaPart);
-    return __result->toCpp();
+    return __result->toStdString();
   }
   std::vector<std::string> JHybridSoundSpec::getAllDebugLogPaths() {
     static const auto method = javaClassStatic()->getMethod<jni::local_ref<jni::JArrayClass<jni::JString>>()>("getAllDebugLogPaths");
@@ -547,10 +543,10 @@ namespace margelo::nitro::sound {
       return __vector;
     }();
   }
-  std::variant<nitro::NullType, std::string> JHybridSoundSpec::readDebugLog(const std::optional<std::string>& path) {
-    static const auto method = javaClassStatic()->getMethod<jni::local_ref<JVariant_NullType_String>(jni::alias_ref<jni::JString> /* path */)>("readDebugLog");
+  std::string JHybridSoundSpec::readDebugLog(const std::optional<std::string>& path) {
+    static const auto method = javaClassStatic()->getMethod<jni::local_ref<jni::JString>(jni::alias_ref<jni::JString> /* path */)>("readDebugLog");
     auto __result = method(_javaPart, path.has_value() ? jni::make_jstring(path.value()) : nullptr);
-    return __result->toCpp();
+    return __result->toStdString();
   }
   std::shared_ptr<Promise<void>> JHybridSoundSpec::clearDebugLogs() {
     static const auto method = javaClassStatic()->getMethod<jni::local_ref<JPromise::javaobject>()>("clearDebugLogs");

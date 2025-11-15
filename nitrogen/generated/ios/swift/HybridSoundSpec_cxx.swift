@@ -786,21 +786,14 @@ open class HybridSoundSpec_cxx {
   }
   
   @inline(__always)
-  public final func getDebugLogPath() -> bridge.Result_std__variant_nitro__NullType__std__string__ {
+  public final func getDebugLogPath() -> bridge.Result_std__string_ {
     do {
       let __result = try self.__implementation.getDebugLogPath()
-      let __resultCpp = { () -> bridge.std__variant_nitro__NullType__std__string_ in
-        switch __result {
-          case .first(let __value):
-            return bridge.create_std__variant_nitro__NullType__std__string_(margelo.nitro.NullType.null)
-          case .second(let __value):
-            return bridge.create_std__variant_nitro__NullType__std__string_(std.string(__value))
-        }
-      }().variant
-      return bridge.create_Result_std__variant_nitro__NullType__std__string__(__resultCpp)
+      let __resultCpp = std.string(__result)
+      return bridge.create_Result_std__string_(__resultCpp)
     } catch (let __error) {
       let __exceptionPtr = __error.toCpp()
-      return bridge.create_Result_std__variant_nitro__NullType__std__string__(__exceptionPtr)
+      return bridge.create_Result_std__string_(__exceptionPtr)
     }
   }
   
@@ -823,7 +816,7 @@ open class HybridSoundSpec_cxx {
   }
   
   @inline(__always)
-  public final func readDebugLog(path: bridge.std__optional_std__string_) -> bridge.Result_std__variant_nitro__NullType__std__string__ {
+  public final func readDebugLog(path: bridge.std__optional_std__string_) -> bridge.Result_std__string_ {
     do {
       let __result = try self.__implementation.readDebugLog(path: { () -> String? in
         if bridge.has_value_std__optional_std__string_(path) {
@@ -833,18 +826,11 @@ open class HybridSoundSpec_cxx {
           return nil
         }
       }())
-      let __resultCpp = { () -> bridge.std__variant_nitro__NullType__std__string_ in
-        switch __result {
-          case .first(let __value):
-            return bridge.create_std__variant_nitro__NullType__std__string_(margelo.nitro.NullType.null)
-          case .second(let __value):
-            return bridge.create_std__variant_nitro__NullType__std__string_(std.string(__value))
-        }
-      }().variant
-      return bridge.create_Result_std__variant_nitro__NullType__std__string__(__resultCpp)
+      let __resultCpp = std.string(__result)
+      return bridge.create_Result_std__string_(__resultCpp)
     } catch (let __error) {
       let __exceptionPtr = __error.toCpp()
-      return bridge.create_Result_std__variant_nitro__NullType__std__string__(__exceptionPtr)
+      return bridge.create_Result_std__string_(__exceptionPtr)
     }
   }
   

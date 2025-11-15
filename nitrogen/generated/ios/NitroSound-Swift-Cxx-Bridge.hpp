@@ -29,7 +29,6 @@ namespace NitroSound { class HybridSoundSpec_cxx; }
 #include "PlaybackEndType.hpp"
 #include "RecordBackType.hpp"
 #include "RecordingMode.hpp"
-#include <NitroModules/Null.hpp>
 #include <NitroModules/Promise.hpp>
 #include <NitroModules/PromiseHolder.hpp>
 #include <NitroModules/Result.hpp>
@@ -39,7 +38,6 @@ namespace NitroSound { class HybridSoundSpec_cxx; }
 #include <optional>
 #include <string>
 #include <unordered_map>
-#include <variant>
 #include <vector>
 
 /**
@@ -379,35 +377,6 @@ namespace margelo::nitro::sound::bridge::swift {
     return Func_void_std__string_std__string_bool_double_Wrapper(std::move(value));
   }
   
-  // pragma MARK: std::variant<nitro::NullType, std::string>
-  /**
-   * Wrapper struct for `std::variant<nitro::NullType, std::string>`.
-   * std::variant cannot be used in Swift because of a Swift bug.
-   * Not even specializing it works. So we create a wrapper struct.
-   */
-  struct std__variant_nitro__NullType__std__string_ {
-    std::variant<nitro::NullType, std::string> variant;
-    std__variant_nitro__NullType__std__string_(std::variant<nitro::NullType, std::string> variant): variant(variant) { }
-    operator std::variant<nitro::NullType, std::string>() const noexcept {
-      return variant;
-    }
-    inline size_t index() const noexcept {
-      return variant.index();
-    }
-    inline nitro::NullType get_0() const noexcept {
-      return std::get<0>(variant);
-    }
-    inline std::string get_1() const noexcept {
-      return std::get<1>(variant);
-    }
-  };
-  inline std__variant_nitro__NullType__std__string_ create_std__variant_nitro__NullType__std__string_(nitro::NullType value) noexcept {
-    return std__variant_nitro__NullType__std__string_(value);
-  }
-  inline std__variant_nitro__NullType__std__string_ create_std__variant_nitro__NullType__std__string_(const std::string& value) noexcept {
-    return std__variant_nitro__NullType__std__string_(value);
-  }
-  
   // pragma MARK: std::vector<std::string>
   /**
    * Specialized version of `std::vector<std::string>`.
@@ -476,13 +445,13 @@ namespace margelo::nitro::sound::bridge::swift {
     return Result<void>::withError(error);
   }
   
-  // pragma MARK: Result<std::variant<nitro::NullType, std::string>>
-  using Result_std__variant_nitro__NullType__std__string__ = Result<std::variant<nitro::NullType, std::string>>;
-  inline Result_std__variant_nitro__NullType__std__string__ create_Result_std__variant_nitro__NullType__std__string__(const std::variant<nitro::NullType, std::string>& value) noexcept {
-    return Result<std::variant<nitro::NullType, std::string>>::withValue(value);
+  // pragma MARK: Result<std::string>
+  using Result_std__string_ = Result<std::string>;
+  inline Result_std__string_ create_Result_std__string_(const std::string& value) noexcept {
+    return Result<std::string>::withValue(value);
   }
-  inline Result_std__variant_nitro__NullType__std__string__ create_Result_std__variant_nitro__NullType__std__string__(const std::exception_ptr& error) noexcept {
-    return Result<std::variant<nitro::NullType, std::string>>::withError(error);
+  inline Result_std__string_ create_Result_std__string_(const std::exception_ptr& error) noexcept {
+    return Result<std::string>::withError(error);
   }
   
   // pragma MARK: Result<std::vector<std::string>>
@@ -492,15 +461,6 @@ namespace margelo::nitro::sound::bridge::swift {
   }
   inline Result_std__vector_std__string__ create_Result_std__vector_std__string__(const std::exception_ptr& error) noexcept {
     return Result<std::vector<std::string>>::withError(error);
-  }
-  
-  // pragma MARK: Result<std::string>
-  using Result_std__string_ = Result<std::string>;
-  inline Result_std__string_ create_Result_std__string_(const std::string& value) noexcept {
-    return Result<std::string>::withValue(value);
-  }
-  inline Result_std__string_ create_Result_std__string_(const std::exception_ptr& error) noexcept {
-    return Result<std::string>::withError(error);
   }
 
 } // namespace margelo::nitro::sound::bridge::swift

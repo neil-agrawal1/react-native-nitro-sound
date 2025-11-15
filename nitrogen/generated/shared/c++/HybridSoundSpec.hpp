@@ -31,8 +31,6 @@ namespace margelo::nitro::sound { struct PlaybackEndType; }
 #include <functional>
 #include "PlayBackType.hpp"
 #include "PlaybackEndType.hpp"
-#include <NitroModules/Null.hpp>
-#include <variant>
 #include <vector>
 
 namespace margelo::nitro::sound {
@@ -103,9 +101,9 @@ namespace margelo::nitro::sound {
       virtual void setSegmentCallback(const std::function<void(const std::string& /* filename */, const std::string& /* filePath */, bool /* isManual */, double /* duration */)>& callback) = 0;
       virtual void setManualSilenceCallback(const std::function<void()>& callback) = 0;
       virtual void writeDebugLog(const std::string& message) = 0;
-      virtual std::variant<nitro::NullType, std::string> getDebugLogPath() = 0;
+      virtual std::string getDebugLogPath() = 0;
       virtual std::vector<std::string> getAllDebugLogPaths() = 0;
-      virtual std::variant<nitro::NullType, std::string> readDebugLog(const std::optional<std::string>& path) = 0;
+      virtual std::string readDebugLog(const std::optional<std::string>& path) = 0;
       virtual std::shared_ptr<Promise<void>> clearDebugLogs() = 0;
       virtual std::string mmss(double secs) = 0;
       virtual std::string mmssss(double milisecs) = 0;
