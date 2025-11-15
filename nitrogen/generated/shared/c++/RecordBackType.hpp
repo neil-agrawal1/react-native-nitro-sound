@@ -17,11 +17,6 @@
 #else
 #error NitroModules cannot be found! Are you sure you installed NitroModules properly?
 #endif
-#if __has_include(<NitroModules/JSIHelpers.hpp>)
-#include <NitroModules/JSIHelpers.hpp>
-#else
-#error NitroModules cannot be found! Are you sure you installed NitroModules properly?
-#endif
 
 
 
@@ -73,9 +68,6 @@ namespace margelo::nitro {
         return false;
       }
       jsi::Object obj = value.getObject(runtime);
-      if (!nitro::isPlainObject(runtime, obj)) {
-        return false;
-      }
       if (!JSIConverter<std::optional<bool>>::canConvert(runtime, obj.getProperty(runtime, "isRecording"))) return false;
       if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, "currentPosition"))) return false;
       if (!JSIConverter<std::optional<double>>::canConvert(runtime, obj.getProperty(runtime, "currentMetering"))) return false;

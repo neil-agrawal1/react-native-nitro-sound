@@ -7,7 +7,6 @@
 
 import Foundation
 import NitroModules
-import NitroModules
 
 /**
  * A class implementation that bridges HybridSoundSpec over to C++.
@@ -77,7 +76,7 @@ open class HybridSoundSpec_cxx {
    */
   public func getCxxPart() -> bridge.std__shared_ptr_HybridSoundSpec_ {
     let cachedCxxPart = self.__cxxPart.lock()
-    if Bool(fromCxx: cachedCxxPart) {
+    if cachedCxxPart.__convertToBool() {
       return cachedCxxPart
     } else {
       let newCxxPart = bridge.create_std__shared_ptr_HybridSoundSpec_(self.toUnsafe())
@@ -104,14 +103,6 @@ open class HybridSoundSpec_cxx {
   @inline(__always)
   public func dispose() {
     self.__implementation.dispose()
-  }
-
-  /**
-   * Call toString() on the Swift class.
-   */
-  @inline(__always)
-  public func toString() -> String {
-    return self.__implementation.toString()
   }
 
   // Properties
