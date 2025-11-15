@@ -2353,7 +2353,7 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
 
                 // Start fading
                 if let currentNode = self.currentPlayerNode {
-                    self.fadeVolume(node: currentNode, from: 1.0, to: 0.0, duration: fadeDuration) {
+                    self.fadeVolume(node: currentNode, from: currentNode.volume, to: 0.0, duration: fadeDuration) {
                         // Stop old node when fade out completes
                         currentNode.stop()
                         currentNode.volume = 0.0  // Ensure volume stays at 0
