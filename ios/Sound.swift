@@ -2271,6 +2271,8 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                 let fadeDuration = duration ?? 3.0
                 let finalVolume = Float(targetVolume ?? 1.0)
 
+                self.bridgedLog("🔀 CROSSFADE START: uri=\(uri), duration=\(fadeDuration)s, targetVolume=\(finalVolume), activePlayer=\(self.activePlayer), currentPlayerNode=\(self.currentPlayerNode != nil ? "NOT NIL" : "NIL")")
+
                 // Ensure audio engine is initialized for crossfading
                 try self.initializeAudioEngine()
 
@@ -2282,10 +2284,15 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                 // Pick next player node
                 let newNode: AVAudioPlayerNode
                 switch self.activePlayer {
-                case .playerA: newNode = self.audioPlayerNodeB!
-                case .playerB: newNode = self.audioPlayerNodeA!
+                case .playerA:
+                    newNode = self.audioPlayerNodeB!
+                    self.bridgedLog("🔀 Picked NEW NODE: B (switching from A)")
+                case .playerB:
+                    newNode = self.audioPlayerNodeA!
+                    self.bridgedLog("🔀 Picked NEW NODE: A (switching from B)")
                 case .none:
                     // Nothing is playing → just start normally
+                    self.bridgedLog("🔀 activePlayer is .none - starting normally instead of crossfading")
                     let startPromise = try self.startPlayer(uri: uri, httpHeaders: nil)
                     startPromise.then { result in promise.resolve(withResult: result) }
                                 .catch { error in promise.reject(withError: error) }
@@ -2353,18 +2360,25 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
 
                 // Start fading
                 if let currentNode = self.currentPlayerNode {
+                    self.bridgedLog("🔀 FADE OUT OLD NODE: volume \(currentNode.volume) → 0.0 over \(fadeDuration)s")
                     self.fadeVolume(node: currentNode, from: currentNode.volume, to: 0.0, duration: fadeDuration) {
+                        self.bridgedLog("🔀 FADE OUT COMPLETE: Stopping old node")
                         // Stop old node when fade out completes
                         currentNode.stop()
                         currentNode.volume = 0.0  // Ensure volume stays at 0
                     }
+                } else {
+                    self.bridgedLog("⚠️ CROSSFADE BUG: currentPlayerNode is NIL - cannot fade out old audio!")
                 }
 
                 // BUGFIX: Update playbackVolume to match target for subsequent loop iterations
                 self.playbackVolume = finalVolume
 
+                self.bridgedLog("🔀 FADE IN NEW NODE: volume 0.0 → \(finalVolume) over \(fadeDuration)s")
                 self.fadeVolume(node: newNode, from: 0.0, to: finalVolume, duration: fadeDuration) {
                     // Swap references after new node fades in
+                    let newActivePlayer = (newNode == self.audioPlayerNodeA) ? "A" : "B"
+                    self.bridgedLog("🔀 FADE IN COMPLETE: Swapping references to player \(newActivePlayer)")
                     self.currentPlayerNode = newNode
                     self.activePlayer = (newNode == self.audioPlayerNodeA) ? .playerA : .playerB
 
@@ -2373,6 +2387,7 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                 }
 
                 // Resolve immediately (crossfade started)
+                self.bridgedLog("🔀 CROSSFADE PROMISE RESOLVED: Crossfade initiated successfully")
                 promise.resolve(withResult: uri)
 
             } catch {
