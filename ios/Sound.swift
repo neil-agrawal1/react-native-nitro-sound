@@ -2381,10 +2381,12 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                 // Store audio file reference early to ensure it's retained for looping
                 self.currentAudioFile = audioFile
 
-                // Schedule file for playback (just once - seamless loop will handle the rest)
+                // Schedule file for playback (double-buffered for seamless looping)
                 if self.shouldLoopPlayback {
                     newNode.scheduleFile(audioFile, at: nil, completionHandler: nil)
-                    self.bridgedLog("🎵 MAIN TRACK TRANSITION: Scheduled for looping playback")
+                    // Pre-schedule next iteration to prevent gaps (maintains buffer queue)
+                    newNode.scheduleFile(audioFile, at: nil, completionHandler: nil)
+                    self.bridgedLog("🎵 MAIN TRACK TRANSITION: Scheduled for looping playback (double-buffered)")
                 } else {
                     newNode.scheduleFile(audioFile, at: nil) { [weak self] in
                         self?.handlePlaybackCompletion()
