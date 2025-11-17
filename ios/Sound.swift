@@ -1734,7 +1734,8 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
         guard self.shouldLoopPlayback,
               !self.isLoopCrossfadeActive,
               url.absoluteString == self.currentLoopingFileURI else {
-            self.bridgedLog("🛑 Loop crossfade cancelled - conditions not met (looping:\(self.shouldLoopPlayback), active:\(self.isLoopCrossfadeActive), fileMatch:\(url.absoluteString == self.currentLoopingFileURI ?? false))")
+            let fileMatches = url.absoluteString == self.currentLoopingFileURI
+            self.bridgedLog("🛑 Loop crossfade cancelled - conditions not met (looping:\(self.shouldLoopPlayback), active:\(self.isLoopCrossfadeActive), fileMatch:\(fileMatches))")
             return
         }
 
