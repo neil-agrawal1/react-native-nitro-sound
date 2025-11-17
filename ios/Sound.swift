@@ -1648,6 +1648,8 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
 
                 // Schedule file for playback
                 if self.shouldLoopPlayback {
+                    // CRITICAL: Set looping file URI before starting seamless loop
+                    self.currentLoopingFileURI = url.absoluteString
                     // Use crossfade looping for seamless M4A loops
                     self.startSeamlessLoop(audioFile: audioFile, url: url)
                 } else {
@@ -1694,6 +1696,8 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
 
         // Schedule first playback
         primaryNode.scheduleFile(audioFile, at: nil, completionHandler: nil)
+        // Pre-schedule next iteration to prevent gaps (maintains buffer queue)
+        primaryNode.scheduleFile(audioFile, at: nil, completionHandler: nil)
 
         // Calculate when to trigger crossfade (20ms before end)
         let totalDuration = Double(audioFile.length) / audioFile.fileFormat.sampleRate
@@ -1735,7 +1739,7 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
               !self.isLoopCrossfadeActive,
               url.absoluteString == self.currentLoopingFileURI else {
             let fileMatches = url.absoluteString == self.currentLoopingFileURI
-            self.bridgedLog("🛑 Loop crossfade cancelled - conditions not met (looping:\(self.shouldLoopPlayback), active:\(self.isLoopCrossfadeActive), fileMatch:\(fileMatches))")
+            self.bridgedLog("🔁❌ SEAMLESS LOOP: Cancelled - conditions not met (looping:\(self.shouldLoopPlayback), active:\(self.isLoopCrossfadeActive), fileMatch:\(fileMatches))")
             return
         }
 
@@ -1749,27 +1753,30 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
         switch self.activePlayer {
         case .playerA:
             newNode = self.audioPlayerNodeB!
-            self.bridgedLog("🔄 Loop rotation: A → B")
+            self.bridgedLog("🔁 SEAMLESS LOOP: Node rotation A → B")
         case .playerB:
             newNode = self.audioPlayerNodeC!
-            self.bridgedLog("🔄 Loop rotation: B → C")
+            self.bridgedLog("🔁 SEAMLESS LOOP: Node rotation B → C")
         case .playerC:
             newNode = self.audioPlayerNodeA!
-            self.bridgedLog("🔄 Loop rotation: C → A")
+            self.bridgedLog("🔁 SEAMLESS LOOP: Node rotation C → A")
         case .none:
             newNode = self.audioPlayerNodeA!
-            self.bridgedLog("🔄 Loop starting on A")
+            self.bridgedLog("🔁 SEAMLESS LOOP: Starting on node A")
         }
 
         let totalDuration = Double(audioFile.length) / audioFile.fileFormat.sampleRate
-        self.bridgedLog("🔄 Crossfading loop: duration=\(String(format: "%.1f", totalDuration))s")
-        self.bridgedLog("🔄 Loop volumes: oldNode.volume=\(oldNode.volume), playbackVolume=\(self.playbackVolume), newNode.volume=\(newNode.volume)")
+        let fileName = (url.lastPathComponent as NSString).deletingPathExtension
+        self.bridgedLog("🔁 SEAMLESS LOOP: Starting 1s crossfade for '\(fileName)' (duration=\(String(format: "%.1f", totalDuration))s)")
+        self.bridgedLog("🔁 SEAMLESS LOOP: Volumes - old:\(oldNode.volume), target:\(self.playbackVolume), new:\(newNode.volume)")
 
         // Prepare new node
         newNode.stop()
         newNode.reset()
         newNode.volume = 0.0
-        self.bridgedLog("🔄 Starting newNode playback at volume 0.0")
+        self.bridgedLog("🔁 SEAMLESS LOOP: Starting new node playback at volume 0.0")
+        newNode.scheduleFile(audioFile, at: nil, completionHandler: nil)
+        // Pre-schedule next iteration to prevent gaps (maintains buffer queue)
         newNode.scheduleFile(audioFile, at: nil, completionHandler: nil)
         newNode.play()
 
@@ -1777,19 +1784,20 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
         // This ensures timing is relative to when playback STARTED, not when fade finishes
         let crossfadeStartTime = max(0, totalDuration - self.loopCrossfadeDuration)
         self.scheduleLoopCrossfade(after: crossfadeStartTime, audioFile: audioFile, url: url)
+        self.bridgedLog("🔁 SEAMLESS LOOP: Next loop scheduled in \(String(format: "%.1f", crossfadeStartTime))s")
 
         // Crossfade - use actual node volume, not stored playbackVolume
-        self.bridgedLog("🔄 FADE OUT: oldNode from \(oldNode.volume) → 0.0 over \(self.loopCrossfadeDuration)s")
+        self.bridgedLog("🔁 SEAMLESS LOOP: Fade out \(oldNode.volume) → 0.0 over \(self.loopCrossfadeDuration)s")
         self.fadeVolume(node: oldNode, from: oldNode.volume, to: 0.0, duration: self.loopCrossfadeDuration) {
-            self.bridgedLog("🔄 FADE OUT COMPLETE: Stopping oldNode")
+            self.bridgedLog("🔁 SEAMLESS LOOP: Fade out complete, stopping old node")
             oldNode.stop()
             oldNode.reset()
         }
 
-        self.bridgedLog("🔄 FADE IN: newNode from 0.0 → \(self.playbackVolume) over \(self.loopCrossfadeDuration)s")
+        self.bridgedLog("🔁 SEAMLESS LOOP: Fade in 0.0 → \(self.playbackVolume) over \(self.loopCrossfadeDuration)s")
         self.fadeVolume(node: newNode, from: 0.0, to: self.playbackVolume, duration: self.loopCrossfadeDuration) { [weak self] in
             guard let self = self else { return }
-            self.bridgedLog("🔄 FADE IN COMPLETE: Swapping references, loop crossfade done")
+            self.bridgedLog("🔁 SEAMLESS LOOP: Fade in complete, loop crossfade done ✓")
             // Update current player reference and reset flag
             self.currentPlayerNode = newNode
             self.activePlayer = self.getPlayerEnum(for: newNode)
@@ -2300,7 +2308,9 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                 let fadeDuration = duration ?? 3.0
                 let finalVolume = Float(targetVolume ?? 1.0)
 
-                self.bridgedLog("🔀 CROSSFADE START: uri=\(uri), duration=\(fadeDuration)s, targetVolume=\(finalVolume), activePlayer=\(self.activePlayer), currentPlayerNode=\(self.currentPlayerNode != nil ? "NOT NIL" : "NIL")")
+                self.bridgedLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                self.bridgedLog("🎵 MAIN TRACK TRANSITION: Starting \(fadeDuration)s crossfade")
+                self.bridgedLog("🎵 Target volume: \(finalVolume), Current player: \(self.activePlayer)")
 
                 // Ensure audio engine is initialized for crossfading
                 try self.initializeAudioEngine()
@@ -2309,22 +2319,23 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                 self.loopCrossfadeTimer?.cancel()
                 self.loopCrossfadeTimer = nil
                 self.isLoopCrossfadeActive = false
+                self.bridgedLog("🎵 MAIN TRACK TRANSITION: Cancelled previous loop timers")
 
                 // Pick next player node (3-node rotation: A→B→C→A)
                 let newNode: AVAudioPlayerNode
                 switch self.activePlayer {
                 case .playerA:
                     newNode = self.audioPlayerNodeB!
-                    self.bridgedLog("🔀 Rotation: A → B")
+                    self.bridgedLog("🎵 MAIN TRACK TRANSITION: Node rotation A → B")
                 case .playerB:
                     newNode = self.audioPlayerNodeC!
-                    self.bridgedLog("🔀 Rotation: B → C")
+                    self.bridgedLog("🎵 MAIN TRACK TRANSITION: Node rotation B → C")
                 case .playerC:
                     newNode = self.audioPlayerNodeA!
-                    self.bridgedLog("🔀 Rotation: C → A")
+                    self.bridgedLog("🎵 MAIN TRACK TRANSITION: Node rotation C → A")
                 case .none:
                     newNode = self.audioPlayerNodeA!
-                    self.bridgedLog("🔀 Starting fresh on A")
+                    self.bridgedLog("🎵 MAIN TRACK TRANSITION: Starting fresh on node A")
                 }
 
                 // Load the audio file
@@ -2354,6 +2365,9 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                 }
 
                 let audioFile = try AVAudioFile(forReading: url)
+                let fileName = (url.lastPathComponent as NSString).deletingPathExtension
+                let totalDuration = Double(audioFile.length) / audioFile.fileFormat.sampleRate
+                self.bridgedLog("🎵 MAIN TRACK TRANSITION: Loading '\(fileName)' (duration: \(String(format: "%.1f", totalDuration))s)")
 
                 // Prepare new node
                 newNode.stop()
@@ -2370,10 +2384,12 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                 // Schedule file for playback (just once - seamless loop will handle the rest)
                 if self.shouldLoopPlayback {
                     newNode.scheduleFile(audioFile, at: nil, completionHandler: nil)
+                    self.bridgedLog("🎵 MAIN TRACK TRANSITION: Scheduled for looping playback")
                 } else {
                     newNode.scheduleFile(audioFile, at: nil) { [weak self] in
                         self?.handlePlaybackCompletion()
                     }
+                    self.bridgedLog("🎵 MAIN TRACK TRANSITION: Scheduled for single playback")
                 }
 
                 newNode.play()
@@ -2383,35 +2399,36 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
 
                 // Start fading
                 if let currentNode = self.currentPlayerNode {
-                    self.bridgedLog("🔀 FADE OUT OLD NODE: volume \(currentNode.volume) → 0.0 over \(fadeDuration)s")
+                    self.bridgedLog("🎵 MAIN TRACK TRANSITION: Fade out \(currentNode.volume) → 0.0 over \(fadeDuration)s")
                     self.fadeVolume(node: currentNode, from: currentNode.volume, to: 0.0, duration: fadeDuration) {
-                        self.bridgedLog("🔀 FADE OUT COMPLETE: Stopping old node")
+                        self.bridgedLog("🎵 MAIN TRACK TRANSITION: Fade out complete, stopping old node")
                         // Stop old node when fade out completes
                         currentNode.stop()
                         currentNode.volume = 0.0  // Ensure volume stays at 0
                     }
                 } else {
-                    self.bridgedLog("⚠️ CROSSFADE BUG: currentPlayerNode is NIL - cannot fade out old audio!")
+                    self.bridgedLog("⚠️ MAIN TRACK TRANSITION: No previous node to fade out (first track)")
                 }
 
                 // BUGFIX: Update playbackVolume to match target for subsequent loop iterations
                 self.playbackVolume = finalVolume
 
-                self.bridgedLog("🔀 FADE IN NEW NODE: volume 0.0 → \(finalVolume) over \(fadeDuration)s")
+                self.bridgedLog("🎵 MAIN TRACK TRANSITION: Fade in 0.0 → \(finalVolume) over \(fadeDuration)s")
                 self.fadeVolume(node: newNode, from: 0.0, to: finalVolume, duration: fadeDuration) {
                     // Swap references after new node fades in
-                    self.bridgedLog("🔀 FADE IN COMPLETE: Swapping references")
+                    self.bridgedLog("🎵 MAIN TRACK TRANSITION: Fade in complete, swapping references")
                     self.currentPlayerNode = newNode
                     self.activePlayer = self.getPlayerEnum(for: newNode)
                     self.currentLoopingFileURI = uri
 
                     // NOW schedule loop timer AFTER crossfade completes (prevents race condition)
                     if self.shouldLoopPlayback {
-                        let totalDuration = Double(audioFile.length) / audioFile.fileFormat.sampleRate
                         let crossfadeStartTime = max(0, totalDuration - self.loopCrossfadeDuration)
                         self.scheduleLoopCrossfade(after: crossfadeStartTime, audioFile: audioFile, url: url)
-                        self.bridgedLog("🔀 Loop timer scheduled for \(crossfadeStartTime)s from now")
+                        self.bridgedLog("🎵 MAIN TRACK TRANSITION: Scheduled first loop in \(String(format: "%.1f", crossfadeStartTime))s")
                     }
+                    self.bridgedLog("🎵 MAIN TRACK TRANSITION: Complete ✓")
+                    self.bridgedLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
                 }
 
                 // Resolve immediately (crossfade started)
