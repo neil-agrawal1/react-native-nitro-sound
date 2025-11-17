@@ -1741,11 +1741,13 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
 
         let totalDuration = Double(audioFile.length) / audioFile.fileFormat.sampleRate
         self.bridgedLog("🔄 Crossfading loop: \(self.activePlayer == .playerA ? "B→A" : "A→B") (\(String(format: "%.1f", totalDuration))s)")
+        self.bridgedLog("🔄 Loop volumes: oldNode.volume=\(oldNode.volume), playbackVolume=\(self.playbackVolume), newNode.volume=\(newNode.volume)")
 
         // Prepare new node
         newNode.stop()
         newNode.reset()
         newNode.volume = 0.0
+        self.bridgedLog("🔄 Starting newNode playback at volume 0.0")
         newNode.scheduleFile(audioFile, at: nil, completionHandler: nil)
         newNode.play()
 
@@ -1755,13 +1757,17 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
         self.scheduleLoopCrossfade(after: crossfadeStartTime, audioFile: audioFile, url: url)
 
         // Crossfade - use actual node volume, not stored playbackVolume
+        self.bridgedLog("🔄 FADE OUT: oldNode from \(oldNode.volume) → 0.0 over \(self.loopCrossfadeDuration)s")
         self.fadeVolume(node: oldNode, from: oldNode.volume, to: 0.0, duration: self.loopCrossfadeDuration) {
+            self.bridgedLog("🔄 FADE OUT COMPLETE: Stopping oldNode")
             oldNode.stop()
             oldNode.reset()
         }
 
+        self.bridgedLog("🔄 FADE IN: newNode from 0.0 → \(self.playbackVolume) over \(self.loopCrossfadeDuration)s")
         self.fadeVolume(node: newNode, from: 0.0, to: self.playbackVolume, duration: self.loopCrossfadeDuration) { [weak self] in
             guard let self = self else { return }
+            self.bridgedLog("🔄 FADE IN COMPLETE: Swapping references, loop crossfade done")
             // Update current player reference and reset flag
             self.currentPlayerNode = newNode
             self.isLoopCrossfadeActive = false
