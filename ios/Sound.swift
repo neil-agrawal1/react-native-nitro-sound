@@ -83,7 +83,7 @@ import Speech
     // VAD properties
     private var vadManager: VadManager?
     private var vadStreamState: VadStreamState?
-    private var vadThreshold: Float = 0.2  // 20% confidence (lower = more sensitive)
+    private var vadThreshold: Float = 0.65  // 65% confidence - balanced threshold to prevent false silence detection
 
     // Audio format conversion (48kHz → 16kHz for VAD)
     private var audioConverter: AVAudioConverter?
@@ -1126,6 +1126,11 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
 
                                     // Update state for next chunk
                                     self.vadStreamState = streamResult.state
+
+                                    // Log VAD state every ~3 seconds (50 frames * ~64ms per frame)
+                                    if self.tapFrameCounter % 50 == 0 {
+                                        self.bridgedLog("🎙️ VAD triggered=\(streamResult.state.triggered) threshold=\(self.vadThreshold) samples=\(streamResult.state.processedSamples)")
+                                    }
 
                                 } catch {
                                     // VAD processing error - state stays at previous value (silent fail)
