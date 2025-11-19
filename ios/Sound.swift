@@ -612,6 +612,8 @@ import Speech
     public func startRecorder() throws -> Promise<Void> {
         let promise = Promise<Void>()
 
+        bridgedLog("🎙️ startRecorder() called")
+
         // Return immediately and process in background
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else {
@@ -620,19 +622,35 @@ import Speech
             }
 
             do {
+                self.bridgedLog("🎙️ Initializing audio engine...")
                 try self.initializeAudioEngine()
+                self.bridgedLog("✅ Audio engine initialized")
+
                 let audioSession = AVAudioSession.sharedInstance()
+                let currentPermission = audioSession.recordPermission
 
-                audioSession.requestRecordPermission { [weak self] allowed in
-                    guard let self = self else { return }
+                self.bridgedLog("🎙️ Checking microphone permission - current state: \(currentPermission.rawValue)")
 
-                    if allowed {
-                        DispatchQueue.global(qos: .userInitiated).async {
-                            self.setupRecording(promise: promise)
+                // Optimize: If permission already granted, skip async callback
+                if currentPermission == .granted {
+                    self.bridgedLog("✅ Permission already granted - proceeding directly to setup")
+                    DispatchQueue.global(qos: .userInitiated).async {
+                        self.setupRecording(promise: promise)
+                    }
+                } else {
+                    self.bridgedLog("🎙️ Requesting microphone permission...")
+                    audioSession.requestRecordPermission { [weak self] allowed in
+                        guard let self = self else { return }
+
+                        if allowed {
+                            self.bridgedLog("✅ Permission granted via callback - proceeding to setup")
+                            DispatchQueue.global(qos: .userInitiated).async {
+                                self.setupRecording(promise: promise)
+                            }
+                        } else {
+                            self.bridgedLog("❌ RECORDING: Microphone permission denied")
+                            promise.reject(withError: RuntimeError.error(withMessage: "Microphone permission denied. Please enable microphone access in Settings > Dust."))
                         }
-                    } else {
-                        self.bridgedLog("❌ RECORDING: Microphone permission denied")
-                        promise.reject(withError: RuntimeError.error(withMessage: "Microphone permission denied. Please enable microphone access in Settings > Dust."))
                     }
                 }
 
@@ -994,13 +1012,19 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
     }
 
     private func setupRecording(promise: Promise<Void>) {
+        bridgedLog("🎙️ setupRecording() called")
+
         do {
             guard let engine = self.audioEngine else {
+                bridgedLog("❌ setupRecording: Audio engine is nil")
                 promise.reject(withError: RuntimeError.error(withMessage: "Unified audio engine not initialized"))
                 return
             }
 
-            if !engine.isRunning {
+            let engineRunning = engine.isRunning
+            bridgedLog("🎙️ Engine state - running: \(engineRunning)")
+
+            if !engineRunning {
                 throw RuntimeError.error(withMessage: "Audio engine is not running")
             }
 
@@ -1010,6 +1034,7 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
 
             let inputNode = engine.inputNode
             let hwFormat = inputNode.outputFormat(forBus: 0)
+            bridgedLog("🎙️ Hardware format: \(Int(hwFormat.sampleRate))Hz, \(hwFormat.channelCount) channels")
 
             // Create target format for VAD (16kHz mono)
             guard let target16kHzFormat = AVAudioFormat(
@@ -1030,7 +1055,9 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
             self.audioConverter = converter
 
             // Remove any existing taps
+            bridgedLog("🎙️ Removing any existing taps...")
             inputNode.removeTap(onBus: 0)
+            bridgedLog("✅ Existing taps removed")
 
             // Init rolling buffer for pre-roll
             rollingBuffer = RollingAudioBuffer()
@@ -1060,6 +1087,7 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
 
             // Install tap using HARDWARE format (not 16kHz)
             // We'll convert buffers to 16kHz inside the callback
+            bridgedLog("🎙️ Installing tap on input node (bufferSize: 1024, format: \(Int(hwFormat.sampleRate))Hz)...")
             inputNode.installTap(onBus: 0, bufferSize: 1024, format: hwFormat) { [weak self] buffer, time in
                 guard let self = self else { return }
 
@@ -1225,7 +1253,10 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                 }
             }
 
+            bridgedLog("✅ Tap installed successfully - audio buffers will now flow to callback")
+            bridgedLog("🎙️ Resolving setupRecording promise...")
             promise.resolve(withResult: ())
+            bridgedLog("✅ setupRecording() completed successfully")
 
         } catch {
             bridgedLog("❌ RECORDING: Setup failed - \(error.localizedDescription)")
@@ -2342,6 +2373,7 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                 }
 
                 let audioFile = try AVAudioFile(forReading: url)
+                let totalDuration = Double(audioFile.length) / audioFile.fileFormat.sampleRate
 
                 // Prepare new node
                 newNode.stop()
