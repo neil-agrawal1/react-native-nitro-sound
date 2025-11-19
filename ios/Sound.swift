@@ -83,7 +83,7 @@ import Speech
     // VAD properties
     private var vadManager: VadManager?
     private var vadStreamState: VadStreamState?
-    private var vadThreshold: Float = 0.55  // 55% confidence - more sensitive to soft/variable speech
+    private var vadThreshold: Float = 0.10  // 10% confidence - optimized for whisper detection (FluidAudio recommended 0.05-0.15)
 
     // Audio format conversion (48kHz → 16kHz for VAD)
     private var audioConverter: AVAudioConverter?
@@ -1118,14 +1118,14 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                             Task {
                                 do {
                                     // Use public streaming API with the samples we copied above
-                                    // Custom VAD config optimized for continuous speech (dream recording)
+                                    // Custom VAD config optimized for whisper detection (FluidAudio recommended)
                                     let customConfig = VadSegmentationConfig(
-                                        minSpeechDuration: 0.25,         // Keep default
-                                        minSilenceDuration: 1.5,         // 1.5s instead of 0.75s - tolerate pauses
+                                        minSpeechDuration: 0.05,         // Catches brief whispers (FluidAudio recommended)
+                                        minSilenceDuration: 0.3,         // More tolerant of pauses (FluidAudio recommended)
                                         maxSpeechDuration: 14.0,         // Keep default
                                         speechPadding: 0.15,             // 0.15s instead of 0.1s - more padding
                                         silenceThresholdForSplit: 0.3,   // Keep default
-                                        negativeThreshold: nil,          // Auto-calculated from threshold
+                                        negativeThreshold: 0.05,         // Explicit hysteresis for fading speech (FluidAudio recommended 0.03-0.08)
                                         negativeThresholdOffset: 0.10,   // 0.10 instead of 0.15 - tighter hysteresis
                                         minSilenceAtMaxSpeech: 0.098,    // Keep default
                                         useMaxPossibleSilenceAtMaxSpeech: true  // Keep default
