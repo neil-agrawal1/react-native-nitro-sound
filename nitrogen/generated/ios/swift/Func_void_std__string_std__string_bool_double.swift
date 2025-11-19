@@ -5,8 +5,8 @@
 /// Copyright © 2025 Marc Rousavy @ Margelo
 ///
 
+import Foundation
 import NitroModules
-
 
 /**
  * Wraps a Swift `(_ filename: String, _ filePath: String, _ isManual: Bool, _ duration: Double) -> Void` as a class.
