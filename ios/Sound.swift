@@ -1123,7 +1123,7 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                                         minSpeechDuration: 0.05,         // Catches brief whispers (FluidAudio recommended)
                                         minSilenceDuration: 0.3,         // More tolerant of pauses (FluidAudio recommended)
                                         maxSpeechDuration: 14.0,         // Keep default
-                                        speechPadding: 0.15,             // 0.15s instead of 0.1s - more padding
+                                        speechPadding: 0.05,             // Must be <= minSpeechDuration (0.05)
                                         silenceThresholdForSplit: 0.3,   // Keep default
                                         negativeThreshold: 0.05,         // Explicit hysteresis for fading speech (FluidAudio recommended 0.03-0.08)
                                         negativeThresholdOffset: 0.10,   // 0.10 instead of 0.15 - tighter hysteresis
