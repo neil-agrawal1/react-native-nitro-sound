@@ -763,7 +763,7 @@ import MediaPlayer
             self.bridgedLog("🎵 Now Playing: Seek to \(targetTime)s")
 
             // Convert to milliseconds and seek
-            let targetMs = Int(targetTime * 1000)
+            let targetMs = Double(targetTime * 1000)
 
             // Call existing seek method
             do {
