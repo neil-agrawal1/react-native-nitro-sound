@@ -124,6 +124,14 @@ abstract class HybridSoundSpec: HybridObject() {
   
   @DoNotStrip
   @Keep
+  abstract fun updateNowPlaying(title: String, artist: String, duration: Double, currentTime: Double): Promise<Unit>
+  
+  @DoNotStrip
+  @Keep
+  abstract fun clearNowPlaying(): Promise<Unit>
+  
+  @DoNotStrip
+  @Keep
   abstract fun getCurrentPosition(): Promise<Double>
   
   @DoNotStrip

@@ -73,6 +73,8 @@ namespace margelo::nitro::sound {
     std::shared_ptr<Promise<std::string>> seekToPlayer(double time) override;
     std::shared_ptr<Promise<std::string>> setVolume(double volume) override;
     std::shared_ptr<Promise<std::string>> setPlaybackSpeed(double playbackSpeed) override;
+    std::shared_ptr<Promise<void>> updateNowPlaying(const std::string& title, const std::string& artist, double duration, double currentTime) override;
+    std::shared_ptr<Promise<void>> clearNowPlaying() override;
     std::shared_ptr<Promise<double>> getCurrentPosition() override;
     std::shared_ptr<Promise<double>> getDuration() override;
     std::shared_ptr<Promise<std::string>> setLoopEnabled(bool enabled) override;

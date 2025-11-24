@@ -114,6 +114,26 @@ export interface Sound
   setVolume(volume: number): Promise<string>;
   setPlaybackSpeed(playbackSpeed: number): Promise<string>;
 
+  // Now Playing (lock screen controls)
+  /**
+   * Update Now Playing info on lock screen
+   * @param title Track title to display
+   * @param artist Artist name (optional)
+   * @param duration Total duration in seconds
+   * @param currentTime Current playback position in seconds
+   */
+  updateNowPlaying(
+    title: string,
+    artist: string,
+    duration: number,
+    currentTime: number
+  ): Promise<void>;
+
+  /**
+   * Clear Now Playing info from lock screen
+   */
+  clearNowPlaying(): Promise<void>;
+
   // Position/duration query methods (milliseconds)
   getCurrentPosition(): Promise<number>;
   getDuration(): Promise<number>;

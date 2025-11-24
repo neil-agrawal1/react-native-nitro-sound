@@ -33,6 +33,8 @@ public protocol HybridSoundSpec_protocol: HybridObject {
   func seekToPlayer(time: Double) throws -> Promise<String>
   func setVolume(volume: Double) throws -> Promise<String>
   func setPlaybackSpeed(playbackSpeed: Double) throws -> Promise<String>
+  func updateNowPlaying(title: String, artist: String, duration: Double, currentTime: Double) throws -> Promise<Void>
+  func clearNowPlaying() throws -> Promise<Void>
   func getCurrentPosition() throws -> Promise<Double>
   func getDuration() throws -> Promise<Double>
   func setLoopEnabled(enabled: Bool) throws -> Promise<String>

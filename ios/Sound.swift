@@ -5,6 +5,7 @@ import NitroModules
 import SoundAnalysis
 import FluidAudio
 import Speech
+import MediaPlayer
 
     final class HybridSound: HybridSoundSpec_base, HybridSoundSpec_protocol, SNResultsObserving {
     // Removed AVAudioRecorder - now using unified AVAudioEngine recording
@@ -88,6 +89,12 @@ import Speech
     // Audio format conversion (48kHz → 16kHz for VAD)
     private var audioConverter: AVAudioConverter?
     private var targetFormat: AVAudioFormat?  // 16kHz format for VAD and file writing
+
+    // Now Playing Info (lock screen controls)
+    private var currentTrackTitle: String = "Hypnos"
+    private var currentTrackArtist: String = "Sleep Journey"
+    private var currentTrackDuration: Double = 0.0
+    private var nowPlayingArtwork: MPMediaItemArtwork?
 
     // MARK: - Audio Format Conversion Helper
 
@@ -626,6 +633,9 @@ import Speech
                 try self.initializeAudioEngine()
                 self.bridgedLog("✅ Audio engine initialized")
 
+                // Setup Now Playing controls
+                self.setupRemoteCommandCenter()
+
                 let audioSession = AVAudioSession.sharedInstance()
                 let currentPermission = audioSession.recordPermission
 
@@ -675,6 +685,151 @@ import Speech
         let promise = Promise<String>()
         promise.reject(withError: RuntimeError.error(withMessage: "Pause/resume not supported with unified recording. Use start/stop instead."))
         return promise
+    }
+
+    // MARK: - Now Playing (Lock Screen Controls)
+
+    /// Setup remote command center for lock screen controls
+    private func setupRemoteCommandCenter() {
+        let commandCenter = MPRemoteCommandCenter.shared()
+
+        bridgedLog("🎵 Setting up Now Playing remote commands")
+
+        // Play command
+        commandCenter.playCommand.isEnabled = true
+        commandCenter.playCommand.addTarget { [weak self] event in
+            guard let self = self else { return .commandFailed }
+
+            self.bridgedLog("🎵 Now Playing: Play command received")
+
+            // Resume playback
+            if let playerNode = self.currentPlayerNode {
+                if !playerNode.isPlaying {
+                    playerNode.play()
+                    self.updateNowPlayingPlaybackState(isPlaying: true)
+                }
+            }
+
+            return .success
+        }
+
+        // Pause command
+        commandCenter.pauseCommand.isEnabled = true
+        commandCenter.pauseCommand.addTarget { [weak self] event in
+            guard let self = self else { return .commandFailed }
+
+            self.bridgedLog("🎵 Now Playing: Pause command received")
+
+            // Pause playback
+            if let playerNode = self.currentPlayerNode {
+                if playerNode.isPlaying {
+                    playerNode.pause()
+                    self.updateNowPlayingPlaybackState(isPlaying: false)
+                }
+            }
+
+            return .success
+        }
+
+        // Toggle play/pause (for headphone controls)
+        commandCenter.togglePlayPauseCommand.isEnabled = true
+        commandCenter.togglePlayPauseCommand.addTarget { [weak self] event in
+            guard let self = self else { return .commandFailed }
+
+            self.bridgedLog("🎵 Now Playing: Toggle play/pause")
+
+            if let playerNode = self.currentPlayerNode {
+                if playerNode.isPlaying {
+                    playerNode.pause()
+                    self.updateNowPlayingPlaybackState(isPlaying: false)
+                } else {
+                    playerNode.play()
+                    self.updateNowPlayingPlaybackState(isPlaying: true)
+                }
+            }
+
+            return .success
+        }
+
+        // Seek command (scrubbing on lock screen)
+        commandCenter.changePlaybackPositionCommand.isEnabled = true
+        commandCenter.changePlaybackPositionCommand.addTarget { [weak self] event in
+            guard let self = self,
+                  let positionEvent = event as? MPChangePlaybackPositionCommandEvent else {
+                return .commandFailed
+            }
+
+            let targetTime = positionEvent.positionTime
+            self.bridgedLog("🎵 Now Playing: Seek to \(targetTime)s")
+
+            // Convert to milliseconds and seek
+            let targetMs = Int(targetTime * 1000)
+
+            // Call existing seek method
+            do {
+                _ = try self.seekToPlayer(time: targetMs)
+                return .success
+            } catch {
+                self.bridgedLog("❌ Seek failed: \(error)")
+                return .commandFailed
+            }
+        }
+
+        // Disable skip commands (not needed for sleep app)
+        commandCenter.nextTrackCommand.isEnabled = false
+        commandCenter.previousTrackCommand.isEnabled = false
+
+        bridgedLog("✅ Now Playing remote commands configured")
+    }
+
+    /// Update Now Playing info on lock screen
+    private func updateNowPlayingInfo(
+        title: String,
+        artist: String? = nil,
+        duration: Double,
+        currentTime: Double
+    ) {
+        var nowPlayingInfo = [String: Any]()
+
+        // Track metadata
+        nowPlayingInfo[MPMediaItemPropertyTitle] = title
+        nowPlayingInfo[MPMediaItemPropertyArtist] = artist ?? self.currentTrackArtist
+
+        // Timing
+        nowPlayingInfo[MPMediaItemPropertyPlaybackDuration] = duration
+        nowPlayingInfo[MPNowPlayingInfoPropertyElapsedPlaybackTime] = currentTime
+        nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] = self.currentPlayerNode?.isPlaying == true ? 1.0 : 0.0
+
+        // Artwork (optional)
+        if let artwork = self.nowPlayingArtwork {
+            nowPlayingInfo[MPMediaItemPropertyArtwork] = artwork
+        }
+
+        // Update the info center
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = nowPlayingInfo
+
+        // Cache values
+        self.currentTrackTitle = title
+        if let artist = artist {
+            self.currentTrackArtist = artist
+        }
+        self.currentTrackDuration = duration
+    }
+
+    /// Update only playback state (for pause/resume without recalculating everything)
+    private func updateNowPlayingPlaybackState(isPlaying: Bool) {
+        guard var nowPlayingInfo = MPNowPlayingInfoCenter.default().nowPlayingInfo else {
+            return
+        }
+
+        nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] = isPlaying ? 1.0 : 0.0
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = nowPlayingInfo
+    }
+
+    /// Clear Now Playing info from lock screen
+    private func clearNowPlayingInfo() {
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+        bridgedLog("🎵 Now Playing info cleared")
     }
 
     // MARK: - File Writing Methods
@@ -1726,6 +1881,19 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
 
                     playerNode.play()
 
+                    // Update Now Playing with track info
+                    let filename = url.lastPathComponent
+                    let title = filename.replacingOccurrences(of: ".mp3", with: "")
+                                       .replacingOccurrences(of: ".m4a", with: "")
+                                       .replacingOccurrences(of: ".wav", with: "")
+                    let duration = Double(audioFile.length) / audioFile.fileFormat.sampleRate
+                    self.updateNowPlayingInfo(
+                        title: title,
+                        artist: nil,
+                        duration: duration,
+                        currentTime: 0
+                    )
+
                     promise.resolve(withResult: uri)
                 }
 
@@ -1910,6 +2078,9 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
         // Reset position cache
         self.lastValidPosition = 0.0
 
+        // Clear Now Playing info
+        self.clearNowPlayingInfo()
+
         // Keep the unified engine running for recording or future playback
         promise.resolve(withResult: "Player stopped")
 
@@ -1922,6 +2093,7 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
         if let playerNode = self.currentPlayerNode {
             playerNode.pause()
             self.stopPlayTimer()
+            self.updateNowPlayingPlaybackState(isPlaying: false)
             promise.resolve(withResult: "Player paused")
         } else {
             promise.reject(withError: RuntimeError.error(withMessage: "No active player node"))
@@ -1935,6 +2107,7 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
 
         if let playerNode = self.currentPlayerNode {
             playerNode.play()
+            self.updateNowPlayingPlaybackState(isPlaying: true)
             DispatchQueue.main.async {
                 self.startPlayTimer()
             }
@@ -2085,6 +2258,38 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
         // For now, we'll just store the rate for future use
         promise.resolve(withResult: "Playback speed stored (rate change not yet supported with unified engine)")
 
+        return promise
+    }
+
+    // MARK: - Public Now Playing Methods
+
+    /// Public method to update Now Playing info from TypeScript
+    public func updateNowPlaying(
+        title: String,
+        artist: String,
+        duration: Double,
+        currentTime: Double
+    ) throws -> Promise<Void> {
+        let promise = Promise<Void>()
+
+        updateNowPlayingInfo(
+            title: title,
+            artist: artist,
+            duration: duration,
+            currentTime: currentTime
+        )
+
+        promise.resolve(withResult: ())
+        return promise
+    }
+
+    /// Public method to clear Now Playing info from TypeScript
+    public func clearNowPlaying() throws -> Promise<Void> {
+        let promise = Promise<Void>()
+
+        clearNowPlayingInfo()
+
+        promise.resolve(withResult: ())
         return promise
     }
 
@@ -2732,6 +2937,14 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                     )
 
                     listener(playBack)
+
+                    // Update Now Playing position (convert ms to seconds)
+                    self.updateNowPlayingInfo(
+                        title: self.currentTrackTitle,
+                        artist: nil,
+                        duration: durationSeconds,
+                        currentTime: currentTimeMs / 1000.0
+                    )
                 }
             }
 

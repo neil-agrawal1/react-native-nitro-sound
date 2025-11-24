@@ -228,6 +228,22 @@ namespace margelo::nitro::sound {
       auto __value = std::move(__result.value());
       return __value;
     }
+    inline std::shared_ptr<Promise<void>> updateNowPlaying(const std::string& title, const std::string& artist, double duration, double currentTime) override {
+      auto __result = _swiftPart.updateNowPlaying(title, artist, std::forward<decltype(duration)>(duration), std::forward<decltype(currentTime)>(currentTime));
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+      auto __value = std::move(__result.value());
+      return __value;
+    }
+    inline std::shared_ptr<Promise<void>> clearNowPlaying() override {
+      auto __result = _swiftPart.clearNowPlaying();
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+      auto __value = std::move(__result.value());
+      return __value;
+    }
     inline std::shared_ptr<Promise<double>> getCurrentPosition() override {
       auto __result = _swiftPart.getCurrentPosition();
       if (__result.hasError()) [[unlikely]] {
