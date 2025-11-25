@@ -27,7 +27,6 @@ namespace margelo::nitro::sound { struct PlaybackEndType; }
 #include "RecordBackType.hpp"
 #include <functional>
 #include "JFunc_void_RecordBackType.hpp"
-#include <NitroModules/JNICallable.hpp>
 #include "JRecordBackType.hpp"
 #include "PlayBackType.hpp"
 #include "JFunc_void_PlayBackType.hpp"
@@ -59,12 +58,6 @@ namespace margelo::nitro::sound {
   void JHybridSoundSpec::dispose() noexcept {
     static const auto method = javaClassStatic()->getMethod<void()>("dispose");
     method(_javaPart);
-  }
-
-  std::string JHybridSoundSpec::toString() {
-    static const auto method = javaClassStatic()->getMethod<jni::JString()>("toString");
-    auto javaString = method(_javaPart);
-    return javaString->toStdString();
   }
 
   // Properties
@@ -402,6 +395,21 @@ namespace margelo::nitro::sound {
       return __promise;
     }();
   }
+  std::shared_ptr<Promise<void>> JHybridSoundSpec::setNowPlayingArtwork(const std::string& imagePath) {
+    static const auto method = javaClassStatic()->getMethod<jni::local_ref<JPromise::javaobject>(jni::alias_ref<jni::JString> /* imagePath */)>("setNowPlayingArtwork");
+    auto __result = method(_javaPart, jni::make_jstring(imagePath));
+    return [&]() {
+      auto __promise = Promise<void>::create();
+      __result->cthis()->addOnResolvedListener([=](const jni::alias_ref<jni::JObject>& /* unit */) {
+        __promise->resolve();
+      });
+      __result->cthis()->addOnRejectedListener([=](const jni::alias_ref<jni::JThrowable>& __throwable) {
+        jni::JniException __jniError(__throwable);
+        __promise->reject(std::make_exception_ptr(__jniError));
+      });
+      return __promise;
+    }();
+  }
   std::shared_ptr<Promise<double>> JHybridSoundSpec::getCurrentPosition() {
     static const auto method = javaClassStatic()->getMethod<jni::local_ref<JPromise::javaobject>()>("getCurrentPosition");
     auto __result = method(_javaPart);
@@ -550,6 +558,22 @@ namespace margelo::nitro::sound {
   void JHybridSoundSpec::setManualSilenceCallback(const std::function<void()>& callback) {
     static const auto method = javaClassStatic()->getMethod<void(jni::alias_ref<JFunc_void::javaobject> /* callback */)>("setManualSilenceCallback_cxx");
     method(_javaPart, JFunc_void_cxx::fromCpp(callback));
+  }
+  void JHybridSoundSpec::setNextTrackCallback(const std::function<void()>& callback) {
+    static const auto method = javaClassStatic()->getMethod<void(jni::alias_ref<JFunc_void::javaobject> /* callback */)>("setNextTrackCallback_cxx");
+    method(_javaPart, JFunc_void_cxx::fromCpp(callback));
+  }
+  void JHybridSoundSpec::removeNextTrackCallback() {
+    static const auto method = javaClassStatic()->getMethod<void()>("removeNextTrackCallback");
+    method(_javaPart);
+  }
+  void JHybridSoundSpec::setPreviousTrackCallback(const std::function<void()>& callback) {
+    static const auto method = javaClassStatic()->getMethod<void(jni::alias_ref<JFunc_void::javaobject> /* callback */)>("setPreviousTrackCallback_cxx");
+    method(_javaPart, JFunc_void_cxx::fromCpp(callback));
+  }
+  void JHybridSoundSpec::removePreviousTrackCallback() {
+    static const auto method = javaClassStatic()->getMethod<void()>("removePreviousTrackCallback");
+    method(_javaPart);
   }
   void JHybridSoundSpec::writeDebugLog(const std::string& message) {
     static const auto method = javaClassStatic()->getMethod<void(jni::alias_ref<jni::JString> /* message */)>("writeDebugLog");

@@ -10,8 +10,7 @@ package com.margelo.nitro.sound
 import androidx.annotation.Keep
 import com.facebook.jni.HybridData
 import com.facebook.proguard.annotations.DoNotStrip
-import com.margelo.nitro.core.Promise
-import com.margelo.nitro.core.HybridObject
+import com.margelo.nitro.core.*
 
 /**
  * A Kotlin class representing the Sound HybridObject.
@@ -35,11 +34,6 @@ abstract class HybridSoundSpec: HybridObject() {
   override fun updateNative(hybridData: HybridData) {
     mHybridData = hybridData
     super.updateNative(hybridData)
-  }
-
-  // Default implementation of `HybridObject.toString()`
-  override fun toString(): String {
-    return "[HybridObject Sound]"
   }
 
   // Properties
@@ -129,6 +123,10 @@ abstract class HybridSoundSpec: HybridObject() {
   @DoNotStrip
   @Keep
   abstract fun clearNowPlaying(): Promise<Unit>
+  
+  @DoNotStrip
+  @Keep
+  abstract fun setNowPlayingArtwork(imagePath: String): Promise<Unit>
   
   @DoNotStrip
   @Keep
@@ -228,6 +226,32 @@ abstract class HybridSoundSpec: HybridObject() {
     return __result
   }
   
+  abstract fun setNextTrackCallback(callback: () -> Unit): Unit
+  
+  @DoNotStrip
+  @Keep
+  private fun setNextTrackCallback_cxx(callback: Func_void): Unit {
+    val __result = setNextTrackCallback(callback)
+    return __result
+  }
+  
+  @DoNotStrip
+  @Keep
+  abstract fun removeNextTrackCallback(): Unit
+  
+  abstract fun setPreviousTrackCallback(callback: () -> Unit): Unit
+  
+  @DoNotStrip
+  @Keep
+  private fun setPreviousTrackCallback_cxx(callback: Func_void): Unit {
+    val __result = setPreviousTrackCallback(callback)
+    return __result
+  }
+  
+  @DoNotStrip
+  @Keep
+  abstract fun removePreviousTrackCallback(): Unit
+  
   @DoNotStrip
   @Keep
   abstract fun writeDebugLog(message: String): Unit
@@ -263,6 +287,6 @@ abstract class HybridSoundSpec: HybridObject() {
   private external fun initHybrid(): HybridData
 
   companion object {
-    protected const val TAG = "HybridSoundSpec"
+    private const val TAG = "HybridSoundSpec"
   }
 }

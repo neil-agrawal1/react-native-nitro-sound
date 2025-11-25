@@ -100,6 +100,11 @@ export interface Sound extends HybridObject<{
      * Clear Now Playing info from lock screen
      */
     clearNowPlaying(): Promise<void>;
+    /**
+     * Set artwork for Now Playing lock screen display
+     * @param imagePath Path to the image file (local file path)
+     */
+    setNowPlayingArtwork(imagePath: string): Promise<void>;
     getCurrentPosition(): Promise<number>;
     getDuration(): Promise<number>;
     setLoopEnabled(enabled: boolean): Promise<string>;
@@ -117,6 +122,10 @@ export interface Sound extends HybridObject<{
     setLogCallback(callback: (message: string) => void): void;
     setSegmentCallback(callback: (filename: string, filePath: string, isManual: boolean, duration: number) => void): void;
     setManualSilenceCallback(callback: () => void): void;
+    setNextTrackCallback(callback: () => void): void;
+    removeNextTrackCallback(): void;
+    setPreviousTrackCallback(callback: () => void): void;
+    removePreviousTrackCallback(): void;
     writeDebugLog(message: string): void;
     getDebugLogPath(): string;
     getAllDebugLogPaths(): string[];

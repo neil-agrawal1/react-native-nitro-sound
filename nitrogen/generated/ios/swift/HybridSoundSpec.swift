@@ -35,6 +35,7 @@ public protocol HybridSoundSpec_protocol: HybridObject {
   func setPlaybackSpeed(playbackSpeed: Double) throws -> Promise<String>
   func updateNowPlaying(title: String, artist: String, duration: Double, currentTime: Double) throws -> Promise<Void>
   func clearNowPlaying() throws -> Promise<Void>
+  func setNowPlayingArtwork(imagePath: String) throws -> Promise<Void>
   func getCurrentPosition() throws -> Promise<Double>
   func getDuration() throws -> Promise<Double>
   func setLoopEnabled(enabled: Bool) throws -> Promise<String>
@@ -52,6 +53,10 @@ public protocol HybridSoundSpec_protocol: HybridObject {
   func setLogCallback(callback: @escaping (_ message: String) -> Void) throws -> Void
   func setSegmentCallback(callback: @escaping (_ filename: String, _ filePath: String, _ isManual: Bool, _ duration: Double) -> Void) throws -> Void
   func setManualSilenceCallback(callback: @escaping () -> Void) throws -> Void
+  func setNextTrackCallback(callback: @escaping () -> Void) throws -> Void
+  func removeNextTrackCallback() throws -> Void
+  func setPreviousTrackCallback(callback: @escaping () -> Void) throws -> Void
+  func removePreviousTrackCallback() throws -> Void
   func writeDebugLog(message: String) throws -> Void
   func getDebugLogPath() throws -> String
   func getAllDebugLogPaths() throws -> [String]
@@ -60,13 +65,6 @@ public protocol HybridSoundSpec_protocol: HybridObject {
   func mmss(secs: Double) throws -> String
   func mmssss(milisecs: Double) throws -> String
   func transcribeAudioFile(filePath: String) throws -> Promise<String>
-}
-
-public extension HybridSoundSpec_protocol {
-  /// Default implementation of ``HybridObject.toString``
-  func toString() -> String {
-    return "[HybridObject Sound]"
-  }
 }
 
 /// See ``HybridSoundSpec``

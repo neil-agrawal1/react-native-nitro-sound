@@ -85,6 +85,7 @@ namespace margelo::nitro::sound {
       virtual std::shared_ptr<Promise<std::string>> setPlaybackSpeed(double playbackSpeed) = 0;
       virtual std::shared_ptr<Promise<void>> updateNowPlaying(const std::string& title, const std::string& artist, double duration, double currentTime) = 0;
       virtual std::shared_ptr<Promise<void>> clearNowPlaying() = 0;
+      virtual std::shared_ptr<Promise<void>> setNowPlayingArtwork(const std::string& imagePath) = 0;
       virtual std::shared_ptr<Promise<double>> getCurrentPosition() = 0;
       virtual std::shared_ptr<Promise<double>> getDuration() = 0;
       virtual std::shared_ptr<Promise<std::string>> setLoopEnabled(bool enabled) = 0;
@@ -102,6 +103,10 @@ namespace margelo::nitro::sound {
       virtual void setLogCallback(const std::function<void(const std::string& /* message */)>& callback) = 0;
       virtual void setSegmentCallback(const std::function<void(const std::string& /* filename */, const std::string& /* filePath */, bool /* isManual */, double /* duration */)>& callback) = 0;
       virtual void setManualSilenceCallback(const std::function<void()>& callback) = 0;
+      virtual void setNextTrackCallback(const std::function<void()>& callback) = 0;
+      virtual void removeNextTrackCallback() = 0;
+      virtual void setPreviousTrackCallback(const std::function<void()>& callback) = 0;
+      virtual void removePreviousTrackCallback() = 0;
       virtual void writeDebugLog(const std::string& message) = 0;
       virtual std::string getDebugLogPath() = 0;
       virtual std::vector<std::string> getAllDebugLogPaths() = 0;

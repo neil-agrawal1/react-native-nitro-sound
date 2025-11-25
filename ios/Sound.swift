@@ -163,6 +163,10 @@ import MediaPlayer
     // Manual silence timeout callback - notifies JS when 15s of silence detected in manual mode
     private var manualSilenceCallback: (() -> Void)?
 
+    // Lock screen track navigation callbacks
+    private var nextTrackCallback: (() -> Void)?
+    private var previousTrackCallback: (() -> Void)?
+
     // MARK: - Unified Audio Engine Management
 
     override init() {
@@ -707,6 +711,9 @@ import MediaPlayer
                 if !playerNode.isPlaying {
                     playerNode.play()
                     self.updateNowPlayingPlaybackState(isPlaying: true)
+                    DispatchQueue.main.async {
+                        self.startPlayTimer()
+                    }
                 }
             }
 
@@ -724,6 +731,7 @@ import MediaPlayer
             if let playerNode = self.currentPlayerNode {
                 if playerNode.isPlaying {
                     playerNode.pause()
+                    self.stopPlayTimer()
                     self.updateNowPlayingPlaybackState(isPlaying: false)
                 }
             }
@@ -741,10 +749,14 @@ import MediaPlayer
             if let playerNode = self.currentPlayerNode {
                 if playerNode.isPlaying {
                     playerNode.pause()
+                    self.stopPlayTimer()
                     self.updateNowPlayingPlaybackState(isPlaying: false)
                 } else {
                     playerNode.play()
                     self.updateNowPlayingPlaybackState(isPlaying: true)
+                    DispatchQueue.main.async {
+                        self.startPlayTimer()
+                    }
                 }
             }
 
@@ -768,6 +780,19 @@ import MediaPlayer
             // Call existing seek method
             do {
                 _ = try self.seekToPlayer(time: targetMs)
+
+                // Update Now Playing position immediately after seek
+                if let audioFile = self.currentAudioFile {
+                    let durationSeconds = Double(audioFile.length) / audioFile.fileFormat.sampleRate
+                    self.updateNowPlayingInfo(
+                        title: self.currentTrackTitle,
+                        artist: nil,
+                        duration: durationSeconds,
+                        currentTime: targetTime
+                    )
+                    self.bridgedLog("📍 Updated Now Playing after seek to \(targetTime)s")
+                }
+
                 return .success
             } catch {
                 self.bridgedLog("❌ Seek failed: \(error)")
@@ -775,9 +800,37 @@ import MediaPlayer
             }
         }
 
-        // Disable skip commands (not needed for sleep app)
-        commandCenter.nextTrackCommand.isEnabled = false
-        commandCenter.previousTrackCommand.isEnabled = false
+        // Next track command (skip forward)
+        commandCenter.nextTrackCommand.isEnabled = true
+        commandCenter.nextTrackCommand.addTarget { [weak self] event in
+            guard let self = self else { return .commandFailed }
+
+            self.bridgedLog("⏭️  Now Playing: Next track command")
+
+            // Call the callback if registered
+            if let callback = self.nextTrackCallback {
+                callback()
+                return .success
+            }
+
+            return .commandFailed
+        }
+
+        // Previous track command (skip backward)
+        commandCenter.previousTrackCommand.isEnabled = true
+        commandCenter.previousTrackCommand.addTarget { [weak self] event in
+            guard let self = self else { return .commandFailed }
+
+            self.bridgedLog("⏮️  Now Playing: Previous track command")
+
+            // Call the callback if registered
+            if let callback = self.previousTrackCallback {
+                callback()
+                return .success
+            }
+
+            return .commandFailed
+        }
 
         bridgedLog("✅ Now Playing remote commands configured")
     }
@@ -799,6 +852,9 @@ import MediaPlayer
         nowPlayingInfo[MPMediaItemPropertyPlaybackDuration] = duration
         nowPlayingInfo[MPNowPlayingInfoPropertyElapsedPlaybackTime] = currentTime
         nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] = self.currentPlayerNode?.isPlaying == true ? 1.0 : 0.0
+
+        // CRITICAL: Mark as NOT a live stream to enable lock screen scrubbing
+        nowPlayingInfo[MPNowPlayingInfoPropertyIsLiveStream] = false
 
         // Artwork (optional)
         if let artwork = self.nowPlayingArtwork {
@@ -823,6 +879,17 @@ import MediaPlayer
         }
 
         nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] = isPlaying ? 1.0 : 0.0
+
+        // CRITICAL: Update elapsed time to current position when pausing
+        // Otherwise iOS may show stale/incorrect position
+        if let playerNode = self.currentPlayerNode,
+           let lastRenderTime = playerNode.lastRenderTime,
+           let playerTime = playerNode.playerTime(forNodeTime: lastRenderTime),
+           let audioFile = self.currentAudioFile {
+            let currentTimeSeconds = Double(playerTime.sampleTime) / audioFile.fileFormat.sampleRate
+            nowPlayingInfo[MPNowPlayingInfoPropertyElapsedPlaybackTime] = max(0, currentTimeSeconds)
+        }
+
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nowPlayingInfo
     }
 
@@ -2293,6 +2360,45 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
         return promise
     }
 
+    /// Set artwork for Now Playing lock screen display
+    public func setNowPlayingArtwork(imagePath: String) throws -> Promise<Void> {
+        let promise = Promise<Void>()
+
+        // Handle file:// prefix if present
+        let cleanPath = imagePath.hasPrefix("file://")
+            ? String(imagePath.dropFirst(7))
+            : imagePath
+
+        bridgedLog("🖼️ Setting Now Playing artwork from: \(cleanPath)")
+
+        // Load the image from the path
+        guard let image = UIImage(contentsOfFile: cleanPath) else {
+            bridgedLog("⚠️ Failed to load artwork image from: \(cleanPath)")
+            promise.resolve(withResult: ())
+            return promise
+        }
+
+        // Create MPMediaItemArtwork
+        let artwork = MPMediaItemArtwork(boundsSize: image.size) { _ in
+            return image
+        }
+
+        // Store for use in updateNowPlayingInfo
+        self.nowPlayingArtwork = artwork
+
+        // Update existing Now Playing info with artwork if already set
+        if var nowPlayingInfo = MPNowPlayingInfoCenter.default().nowPlayingInfo {
+            nowPlayingInfo[MPMediaItemPropertyArtwork] = artwork
+            MPNowPlayingInfoCenter.default().nowPlayingInfo = nowPlayingInfo
+            bridgedLog("✅ Now Playing artwork updated")
+        } else {
+            bridgedLog("ℹ️ Artwork stored, will be used when Now Playing info is set")
+        }
+
+        promise.resolve(withResult: ())
+        return promise
+    }
+
     public func getCurrentPosition() throws -> Promise<Double> {
         let promise = Promise<Double>()
 
@@ -2390,6 +2496,26 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
         self.manualSilenceCallback = callback
     }
 
+    public func setNextTrackCallback(callback: @escaping () -> Void) throws {
+        self.nextTrackCallback = callback
+        bridgedLog("⏭️  Next track callback registered")
+    }
+
+    public func removeNextTrackCallback() throws {
+        self.nextTrackCallback = nil
+        bridgedLog("⏭️  Next track callback removed")
+    }
+
+    public func setPreviousTrackCallback(callback: @escaping () -> Void) throws {
+        self.previousTrackCallback = callback
+        bridgedLog("⏮️  Previous track callback registered")
+    }
+
+    public func removePreviousTrackCallback() throws {
+        self.previousTrackCallback = nil
+        bridgedLog("⏮️  Previous track callback removed")
+    }
+
     private func bridgedLog(_ message: String) {
         // Log to file for debugging
         FileLogger.shared.log(message)
@@ -2399,10 +2525,8 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
             DispatchQueue.main.async {
                 callback(message)
             }
-        } else {
-            // Fallback: if no JS callback, log to native console
-            NSLog("%@", message)
         }
+        // NSLog removed to prevent duplicate logs in file logging system
     }
 
     public func writeDebugLog(message: String) throws {

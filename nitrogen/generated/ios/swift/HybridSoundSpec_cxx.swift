@@ -76,7 +76,7 @@ open class HybridSoundSpec_cxx {
    */
   public func getCxxPart() -> bridge.std__shared_ptr_HybridSoundSpec_ {
     let cachedCxxPart = self.__cxxPart.lock()
-    if Bool(fromCxx: cachedCxxPart) {
+    if cachedCxxPart.__convertToBool() {
       return cachedCxxPart
     } else {
       let newCxxPart = bridge.create_std__shared_ptr_HybridSoundSpec_(self.toUnsafe())
@@ -103,14 +103,6 @@ open class HybridSoundSpec_cxx {
   @inline(__always)
   public func dispose() {
     self.__implementation.dispose()
-  }
-
-  /**
-   * Call toString() on the Swift class.
-   */
-  @inline(__always)
-  public func toString() -> String {
-    return self.__implementation.toString()
   }
 
   // Properties
@@ -539,6 +531,25 @@ open class HybridSoundSpec_cxx {
   }
   
   @inline(__always)
+  public final func setNowPlayingArtwork(imagePath: std.string) -> bridge.Result_std__shared_ptr_Promise_void___ {
+    do {
+      let __result = try self.__implementation.setNowPlayingArtwork(imagePath: String(imagePath))
+      let __resultCpp = { () -> bridge.std__shared_ptr_Promise_void__ in
+        let __promise = bridge.create_std__shared_ptr_Promise_void__()
+        let __promiseHolder = bridge.wrap_std__shared_ptr_Promise_void__(__promise)
+        __result
+          .then({ __result in __promiseHolder.resolve() })
+          .catch({ __error in __promiseHolder.reject(__error.toCpp()) })
+        return __promise
+      }()
+      return bridge.create_Result_std__shared_ptr_Promise_void___(__resultCpp)
+    } catch (let __error) {
+      let __exceptionPtr = __error.toCpp()
+      return bridge.create_Result_std__shared_ptr_Promise_void___(__exceptionPtr)
+    }
+  }
+  
+  @inline(__always)
   public final func getCurrentPosition() -> bridge.Result_std__shared_ptr_Promise_double___ {
     do {
       let __result = try self.__implementation.getCurrentPosition()
@@ -804,6 +815,60 @@ open class HybridSoundSpec_cxx {
           __wrappedFunction.call()
         }
       }())
+      return bridge.create_Result_void_()
+    } catch (let __error) {
+      let __exceptionPtr = __error.toCpp()
+      return bridge.create_Result_void_(__exceptionPtr)
+    }
+  }
+  
+  @inline(__always)
+  public final func setNextTrackCallback(callback: bridge.Func_void) -> bridge.Result_void_ {
+    do {
+      try self.__implementation.setNextTrackCallback(callback: { () -> () -> Void in
+        let __wrappedFunction = bridge.wrap_Func_void(callback)
+        return { () -> Void in
+          __wrappedFunction.call()
+        }
+      }())
+      return bridge.create_Result_void_()
+    } catch (let __error) {
+      let __exceptionPtr = __error.toCpp()
+      return bridge.create_Result_void_(__exceptionPtr)
+    }
+  }
+  
+  @inline(__always)
+  public final func removeNextTrackCallback() -> bridge.Result_void_ {
+    do {
+      try self.__implementation.removeNextTrackCallback()
+      return bridge.create_Result_void_()
+    } catch (let __error) {
+      let __exceptionPtr = __error.toCpp()
+      return bridge.create_Result_void_(__exceptionPtr)
+    }
+  }
+  
+  @inline(__always)
+  public final func setPreviousTrackCallback(callback: bridge.Func_void) -> bridge.Result_void_ {
+    do {
+      try self.__implementation.setPreviousTrackCallback(callback: { () -> () -> Void in
+        let __wrappedFunction = bridge.wrap_Func_void(callback)
+        return { () -> Void in
+          __wrappedFunction.call()
+        }
+      }())
+      return bridge.create_Result_void_()
+    } catch (let __error) {
+      let __exceptionPtr = __error.toCpp()
+      return bridge.create_Result_void_(__exceptionPtr)
+    }
+  }
+  
+  @inline(__always)
+  public final func removePreviousTrackCallback() -> bridge.Result_void_ {
+    do {
+      try self.__implementation.removePreviousTrackCallback()
       return bridge.create_Result_void_()
     } catch (let __error) {
       let __exceptionPtr = __error.toCpp()

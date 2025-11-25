@@ -66,9 +66,6 @@ namespace margelo::nitro::sound {
     void dispose() noexcept override {
       _swiftPart.dispose();
     }
-    std::string toString() override {
-      return _swiftPart.toString();
-    }
 
   public:
     // Properties
@@ -244,6 +241,14 @@ namespace margelo::nitro::sound {
       auto __value = std::move(__result.value());
       return __value;
     }
+    inline std::shared_ptr<Promise<void>> setNowPlayingArtwork(const std::string& imagePath) override {
+      auto __result = _swiftPart.setNowPlayingArtwork(imagePath);
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+      auto __value = std::move(__result.value());
+      return __value;
+    }
     inline std::shared_ptr<Promise<double>> getCurrentPosition() override {
       auto __result = _swiftPart.getCurrentPosition();
       if (__result.hasError()) [[unlikely]] {
@@ -356,6 +361,30 @@ namespace margelo::nitro::sound {
     }
     inline void setManualSilenceCallback(const std::function<void()>& callback) override {
       auto __result = _swiftPart.setManualSilenceCallback(callback);
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+    }
+    inline void setNextTrackCallback(const std::function<void()>& callback) override {
+      auto __result = _swiftPart.setNextTrackCallback(callback);
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+    }
+    inline void removeNextTrackCallback() override {
+      auto __result = _swiftPart.removeNextTrackCallback();
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+    }
+    inline void setPreviousTrackCallback(const std::function<void()>& callback) override {
+      auto __result = _swiftPart.setPreviousTrackCallback(callback);
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+    }
+    inline void removePreviousTrackCallback() override {
+      auto __result = _swiftPart.removePreviousTrackCallback();
       if (__result.hasError()) [[unlikely]] {
         std::rethrow_exception(__result.error());
       }

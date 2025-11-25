@@ -134,6 +134,12 @@ export interface Sound
    */
   clearNowPlaying(): Promise<void>;
 
+  /**
+   * Set artwork for Now Playing lock screen display
+   * @param imagePath Path to the image file (local file path)
+   */
+  setNowPlayingArtwork(imagePath: string): Promise<void>;
+
   // Position/duration query methods (milliseconds)
   getCurrentPosition(): Promise<number>;
   getDuration(): Promise<number>;
@@ -174,6 +180,12 @@ export interface Sound
 
   // Manual silence timeout callback (called when 15s of silence detected in manual mode)
   setManualSilenceCallback(callback: () => void): void;
+
+  // Lock screen track navigation callbacks
+  setNextTrackCallback(callback: () => void): void;
+  removeNextTrackCallback(): void;
+  setPreviousTrackCallback(callback: () => void): void;
+  removePreviousTrackCallback(): void;
 
   // Debug logging methods
   writeDebugLog(message: string): void;

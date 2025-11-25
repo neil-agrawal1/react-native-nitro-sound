@@ -41,7 +41,6 @@ namespace margelo::nitro::sound {
   public:
     size_t getExternalMemorySize() noexcept override;
     void dispose() noexcept override;
-    std::string toString() override;
 
   public:
     inline const jni::global_ref<JHybridSoundSpec::javaobject>& getJavaPart() const noexcept {
@@ -75,6 +74,7 @@ namespace margelo::nitro::sound {
     std::shared_ptr<Promise<std::string>> setPlaybackSpeed(double playbackSpeed) override;
     std::shared_ptr<Promise<void>> updateNowPlaying(const std::string& title, const std::string& artist, double duration, double currentTime) override;
     std::shared_ptr<Promise<void>> clearNowPlaying() override;
+    std::shared_ptr<Promise<void>> setNowPlayingArtwork(const std::string& imagePath) override;
     std::shared_ptr<Promise<double>> getCurrentPosition() override;
     std::shared_ptr<Promise<double>> getDuration() override;
     std::shared_ptr<Promise<std::string>> setLoopEnabled(bool enabled) override;
@@ -92,6 +92,10 @@ namespace margelo::nitro::sound {
     void setLogCallback(const std::function<void(const std::string& /* message */)>& callback) override;
     void setSegmentCallback(const std::function<void(const std::string& /* filename */, const std::string& /* filePath */, bool /* isManual */, double /* duration */)>& callback) override;
     void setManualSilenceCallback(const std::function<void()>& callback) override;
+    void setNextTrackCallback(const std::function<void()>& callback) override;
+    void removeNextTrackCallback() override;
+    void setPreviousTrackCallback(const std::function<void()>& callback) override;
+    void removePreviousTrackCallback() override;
     void writeDebugLog(const std::string& message) override;
     std::string getDebugLogPath() override;
     std::vector<std::string> getAllDebugLogPaths() override;
