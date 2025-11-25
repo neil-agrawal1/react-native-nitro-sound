@@ -877,6 +877,60 @@ open class HybridSoundSpec_cxx {
   }
   
   @inline(__always)
+  public final func setPauseCallback(callback: bridge.Func_void) -> bridge.Result_void_ {
+    do {
+      try self.__implementation.setPauseCallback(callback: { () -> () -> Void in
+        let __wrappedFunction = bridge.wrap_Func_void(callback)
+        return { () -> Void in
+          __wrappedFunction.call()
+        }
+      }())
+      return bridge.create_Result_void_()
+    } catch (let __error) {
+      let __exceptionPtr = __error.toCpp()
+      return bridge.create_Result_void_(__exceptionPtr)
+    }
+  }
+  
+  @inline(__always)
+  public final func removePauseCallback() -> bridge.Result_void_ {
+    do {
+      try self.__implementation.removePauseCallback()
+      return bridge.create_Result_void_()
+    } catch (let __error) {
+      let __exceptionPtr = __error.toCpp()
+      return bridge.create_Result_void_(__exceptionPtr)
+    }
+  }
+  
+  @inline(__always)
+  public final func setPlayCallback(callback: bridge.Func_void) -> bridge.Result_void_ {
+    do {
+      try self.__implementation.setPlayCallback(callback: { () -> () -> Void in
+        let __wrappedFunction = bridge.wrap_Func_void(callback)
+        return { () -> Void in
+          __wrappedFunction.call()
+        }
+      }())
+      return bridge.create_Result_void_()
+    } catch (let __error) {
+      let __exceptionPtr = __error.toCpp()
+      return bridge.create_Result_void_(__exceptionPtr)
+    }
+  }
+  
+  @inline(__always)
+  public final func removePlayCallback() -> bridge.Result_void_ {
+    do {
+      try self.__implementation.removePlayCallback()
+      return bridge.create_Result_void_()
+    } catch (let __error) {
+      let __exceptionPtr = __error.toCpp()
+      return bridge.create_Result_void_(__exceptionPtr)
+    }
+  }
+  
+  @inline(__always)
   public final func writeDebugLog(message: std.string) -> bridge.Result_void_ {
     do {
       try self.__implementation.writeDebugLog(message: String(message))

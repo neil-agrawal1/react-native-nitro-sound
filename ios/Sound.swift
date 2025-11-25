@@ -167,6 +167,10 @@ import MediaPlayer
     private var nextTrackCallback: (() -> Void)?
     private var previousTrackCallback: (() -> Void)?
 
+    // Lock screen pause/play callbacks (to sync UI with lock screen controls)
+    private var pauseCallback: (() -> Void)?
+    private var playCallback: (() -> Void)?
+
     // MARK: - Unified Audio Engine Management
 
     override init() {
@@ -694,7 +698,13 @@ import MediaPlayer
     // MARK: - Now Playing (Lock Screen Controls)
 
     /// Setup remote command center for lock screen controls
+    private var remoteCommandsConfigured = false
+
     private func setupRemoteCommandCenter() {
+        // Only setup once
+        guard !remoteCommandsConfigured else { return }
+        remoteCommandsConfigured = true
+
         let commandCenter = MPRemoteCommandCenter.shared()
 
         bridgedLog("🎵 Setting up Now Playing remote commands")
@@ -714,6 +724,8 @@ import MediaPlayer
                     DispatchQueue.main.async {
                         self.startPlayTimer()
                     }
+                    // Notify JS/UI that play was triggered from lock screen
+                    self.playCallback?()
                 }
             }
 
@@ -733,6 +745,8 @@ import MediaPlayer
                     playerNode.pause()
                     self.stopPlayTimer()
                     self.updateNowPlayingPlaybackState(isPlaying: false)
+                    // Notify JS/UI that pause was triggered from lock screen
+                    self.pauseCallback?()
                 }
             }
 
@@ -751,12 +765,16 @@ import MediaPlayer
                     playerNode.pause()
                     self.stopPlayTimer()
                     self.updateNowPlayingPlaybackState(isPlaying: false)
+                    // Notify JS/UI that pause was triggered from lock screen/headphones
+                    self.pauseCallback?()
                 } else {
                     playerNode.play()
                     self.updateNowPlayingPlaybackState(isPlaying: true)
                     DispatchQueue.main.async {
                         self.startPlayTimer()
                     }
+                    // Notify JS/UI that play was triggered from lock screen/headphones
+                    self.playCallback?()
                 }
             }
 
@@ -851,7 +869,7 @@ import MediaPlayer
         // Timing
         nowPlayingInfo[MPMediaItemPropertyPlaybackDuration] = duration
         nowPlayingInfo[MPNowPlayingInfoPropertyElapsedPlaybackTime] = currentTime
-        nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] = self.currentPlayerNode?.isPlaying == true ? 1.0 : 0.0
+        nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] = 1.0
 
         // CRITICAL: Mark as NOT a live stream to enable lock screen scrubbing
         nowPlayingInfo[MPNowPlayingInfoPropertyIsLiveStream] = false
@@ -863,6 +881,8 @@ import MediaPlayer
 
         // Update the info center
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nowPlayingInfo
+
+        bridgedLog("🎵 Updated Now Playing: title=\(title), duration=\(duration)s, currentTime=\(currentTime)s, isLiveStream=false")
 
         // Cache values
         self.currentTrackTitle = title
@@ -880,15 +900,9 @@ import MediaPlayer
 
         nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] = isPlaying ? 1.0 : 0.0
 
-        // CRITICAL: Update elapsed time to current position when pausing
-        // Otherwise iOS may show stale/incorrect position
-        if let playerNode = self.currentPlayerNode,
-           let lastRenderTime = playerNode.lastRenderTime,
-           let playerTime = playerNode.playerTime(forNodeTime: lastRenderTime),
-           let audioFile = self.currentAudioFile {
-            let currentTimeSeconds = Double(playerTime.sampleTime) / audioFile.fileFormat.sampleRate
-            nowPlayingInfo[MPNowPlayingInfoPropertyElapsedPlaybackTime] = max(0, currentTimeSeconds)
-        }
+        // Use cached lastValidPosition (in ms) - more reliable than querying paused player
+        let currentTimeSeconds = self.lastValidPosition / 1000.0
+        nowPlayingInfo[MPNowPlayingInfoPropertyElapsedPlaybackTime] = max(0, currentTimeSeconds)
 
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nowPlayingInfo
     }
@@ -1859,6 +1873,9 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                 try self.initializeAudioEngine()
                 try self.ensureEngineRunning()
 
+                // Setup Now Playing controls (idempotent - safe to call multiple times)
+                self.setupRemoteCommandCenter()
+
                 guard let uri = uri, !uri.isEmpty else {
                     self.bridgedLog("❌ PLAYBACK: No URI provided")
                     promise.reject(withError: RuntimeError.error(withMessage: "URI is required for playback"))
@@ -2514,6 +2531,26 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
     public func removePreviousTrackCallback() throws {
         self.previousTrackCallback = nil
         bridgedLog("⏮️  Previous track callback removed")
+    }
+
+    public func setPauseCallback(callback: @escaping () -> Void) throws {
+        self.pauseCallback = callback
+        bridgedLog("⏸️  Pause callback registered")
+    }
+
+    public func removePauseCallback() throws {
+        self.pauseCallback = nil
+        bridgedLog("⏸️  Pause callback removed")
+    }
+
+    public func setPlayCallback(callback: @escaping () -> Void) throws {
+        self.playCallback = callback
+        bridgedLog("▶️  Play callback registered")
+    }
+
+    public func removePlayCallback() throws {
+        self.playCallback = nil
+        bridgedLog("▶️  Play callback removed")
     }
 
     private func bridgedLog(_ message: String) {

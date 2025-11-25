@@ -57,6 +57,10 @@ public protocol HybridSoundSpec_protocol: HybridObject {
   func removeNextTrackCallback() throws -> Void
   func setPreviousTrackCallback(callback: @escaping () -> Void) throws -> Void
   func removePreviousTrackCallback() throws -> Void
+  func setPauseCallback(callback: @escaping () -> Void) throws -> Void
+  func removePauseCallback() throws -> Void
+  func setPlayCallback(callback: @escaping () -> Void) throws -> Void
+  func removePlayCallback() throws -> Void
   func writeDebugLog(message: String) throws -> Void
   func getDebugLogPath() throws -> String
   func getAllDebugLogPaths() throws -> [String]

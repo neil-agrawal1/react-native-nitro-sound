@@ -252,6 +252,32 @@ abstract class HybridSoundSpec: HybridObject() {
   @Keep
   abstract fun removePreviousTrackCallback(): Unit
   
+  abstract fun setPauseCallback(callback: () -> Unit): Unit
+  
+  @DoNotStrip
+  @Keep
+  private fun setPauseCallback_cxx(callback: Func_void): Unit {
+    val __result = setPauseCallback(callback)
+    return __result
+  }
+  
+  @DoNotStrip
+  @Keep
+  abstract fun removePauseCallback(): Unit
+  
+  abstract fun setPlayCallback(callback: () -> Unit): Unit
+  
+  @DoNotStrip
+  @Keep
+  private fun setPlayCallback_cxx(callback: Func_void): Unit {
+    val __result = setPlayCallback(callback)
+    return __result
+  }
+  
+  @DoNotStrip
+  @Keep
+  abstract fun removePlayCallback(): Unit
+  
   @DoNotStrip
   @Keep
   abstract fun writeDebugLog(message: String): Unit

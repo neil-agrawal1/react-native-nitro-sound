@@ -575,6 +575,22 @@ namespace margelo::nitro::sound {
     static const auto method = javaClassStatic()->getMethod<void()>("removePreviousTrackCallback");
     method(_javaPart);
   }
+  void JHybridSoundSpec::setPauseCallback(const std::function<void()>& callback) {
+    static const auto method = javaClassStatic()->getMethod<void(jni::alias_ref<JFunc_void::javaobject> /* callback */)>("setPauseCallback_cxx");
+    method(_javaPart, JFunc_void_cxx::fromCpp(callback));
+  }
+  void JHybridSoundSpec::removePauseCallback() {
+    static const auto method = javaClassStatic()->getMethod<void()>("removePauseCallback");
+    method(_javaPart);
+  }
+  void JHybridSoundSpec::setPlayCallback(const std::function<void()>& callback) {
+    static const auto method = javaClassStatic()->getMethod<void(jni::alias_ref<JFunc_void::javaobject> /* callback */)>("setPlayCallback_cxx");
+    method(_javaPart, JFunc_void_cxx::fromCpp(callback));
+  }
+  void JHybridSoundSpec::removePlayCallback() {
+    static const auto method = javaClassStatic()->getMethod<void()>("removePlayCallback");
+    method(_javaPart);
+  }
   void JHybridSoundSpec::writeDebugLog(const std::string& message) {
     static const auto method = javaClassStatic()->getMethod<void(jni::alias_ref<jni::JString> /* message */)>("writeDebugLog");
     method(_javaPart, jni::make_jstring(message));

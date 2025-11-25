@@ -389,6 +389,30 @@ namespace margelo::nitro::sound {
         std::rethrow_exception(__result.error());
       }
     }
+    inline void setPauseCallback(const std::function<void()>& callback) override {
+      auto __result = _swiftPart.setPauseCallback(callback);
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+    }
+    inline void removePauseCallback() override {
+      auto __result = _swiftPart.removePauseCallback();
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+    }
+    inline void setPlayCallback(const std::function<void()>& callback) override {
+      auto __result = _swiftPart.setPlayCallback(callback);
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+    }
+    inline void removePlayCallback() override {
+      auto __result = _swiftPart.removePlayCallback();
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+    }
     inline void writeDebugLog(const std::string& message) override {
       auto __result = _swiftPart.writeDebugLog(message);
       if (__result.hasError()) [[unlikely]] {

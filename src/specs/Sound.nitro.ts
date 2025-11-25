@@ -187,6 +187,12 @@ export interface Sound
   setPreviousTrackCallback(callback: () => void): void;
   removePreviousTrackCallback(): void;
 
+  // Lock screen pause/play callbacks (to sync UI with lock screen controls)
+  setPauseCallback(callback: () => void): void;
+  removePauseCallback(): void;
+  setPlayCallback(callback: () => void): void;
+  removePlayCallback(): void;
+
   // Debug logging methods
   writeDebugLog(message: string): void;
   getDebugLogPath(): string;

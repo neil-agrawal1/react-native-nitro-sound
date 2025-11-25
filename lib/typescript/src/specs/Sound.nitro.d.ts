@@ -126,6 +126,10 @@ export interface Sound extends HybridObject<{
     removeNextTrackCallback(): void;
     setPreviousTrackCallback(callback: () => void): void;
     removePreviousTrackCallback(): void;
+    setPauseCallback(callback: () => void): void;
+    removePauseCallback(): void;
+    setPlayCallback(callback: () => void): void;
+    removePlayCallback(): void;
     writeDebugLog(message: string): void;
     getDebugLogPath(): string;
     getAllDebugLogPaths(): string[];

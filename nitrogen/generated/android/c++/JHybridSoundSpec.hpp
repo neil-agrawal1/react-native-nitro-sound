@@ -96,6 +96,10 @@ namespace margelo::nitro::sound {
     void removeNextTrackCallback() override;
     void setPreviousTrackCallback(const std::function<void()>& callback) override;
     void removePreviousTrackCallback() override;
+    void setPauseCallback(const std::function<void()>& callback) override;
+    void removePauseCallback() override;
+    void setPlayCallback(const std::function<void()>& callback) override;
+    void removePlayCallback() override;
     void writeDebugLog(const std::string& message) override;
     std::string getDebugLogPath() override;
     std::vector<std::string> getAllDebugLogPaths() override;
