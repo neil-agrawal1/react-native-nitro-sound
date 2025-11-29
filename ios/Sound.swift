@@ -2377,6 +2377,41 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
         return promise
     }
 
+    /// Completely tear down remote command center - removes all targets and clears Now Playing.
+    /// Widget will disappear as if it was never configured.
+    public func teardownRemoteCommands() throws -> Promise<Void> {
+        let promise = Promise<Void>()
+
+        let commandCenter = MPRemoteCommandCenter.shared()
+
+        // Remove ALL targets with nil (Apple docs: "Specify nil to remove all targets")
+        commandCenter.playCommand.removeTarget(nil)
+        commandCenter.pauseCommand.removeTarget(nil)
+        commandCenter.togglePlayPauseCommand.removeTarget(nil)
+        commandCenter.changePlaybackPositionCommand.removeTarget(nil)
+        commandCenter.nextTrackCommand.removeTarget(nil)
+        commandCenter.previousTrackCommand.removeTarget(nil)
+
+        // Disable all commands
+        commandCenter.playCommand.isEnabled = false
+        commandCenter.pauseCommand.isEnabled = false
+        commandCenter.togglePlayPauseCommand.isEnabled = false
+        commandCenter.changePlaybackPositionCommand.isEnabled = false
+        commandCenter.nextTrackCommand.isEnabled = false
+        commandCenter.previousTrackCommand.isEnabled = false
+
+        // Clear Now Playing info
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+
+        // Reset flag so setupRemoteCommandCenter can run again if needed
+        self.remoteCommandsConfigured = false
+
+        bridgedLog("🎛️ Remote command center torn down - widget removed")
+
+        promise.resolve(withResult: ())
+        return promise
+    }
+
     /// Set artwork for Now Playing lock screen display
     public func setNowPlayingArtwork(imagePath: String) throws -> Promise<Void> {
         let promise = Promise<Void>()

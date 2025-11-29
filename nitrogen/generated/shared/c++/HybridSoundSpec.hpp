@@ -111,6 +111,7 @@ namespace margelo::nitro::sound {
       virtual void removePauseCallback() = 0;
       virtual void setPlayCallback(const std::function<void()>& callback) = 0;
       virtual void removePlayCallback() = 0;
+      virtual std::shared_ptr<Promise<void>> teardownRemoteCommands() = 0;
       virtual void writeDebugLog(const std::string& message) = 0;
       virtual std::string getDebugLogPath() = 0;
       virtual std::vector<std::string> getAllDebugLogPaths() = 0;

@@ -100,6 +100,7 @@ namespace margelo::nitro::sound {
     void removePauseCallback() override;
     void setPlayCallback(const std::function<void()>& callback) override;
     void removePlayCallback() override;
+    std::shared_ptr<Promise<void>> teardownRemoteCommands() override;
     void writeDebugLog(const std::string& message) override;
     std::string getDebugLogPath() override;
     std::vector<std::string> getAllDebugLogPaths() override;

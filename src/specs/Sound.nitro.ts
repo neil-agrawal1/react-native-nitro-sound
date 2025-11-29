@@ -193,6 +193,13 @@ export interface Sound
   setPlayCallback(callback: () => void): void;
   removePlayCallback(): void;
 
+  /**
+   * Completely tear down remote command center - removes all targets and clears Now Playing.
+   * Widget will disappear as if it was never configured.
+   * Call this when transitioning to night phase to hide lock screen controls.
+   */
+  teardownRemoteCommands(): Promise<void>;
+
   // Debug logging methods
   writeDebugLog(message: string): void;
   getDebugLogPath(): string;

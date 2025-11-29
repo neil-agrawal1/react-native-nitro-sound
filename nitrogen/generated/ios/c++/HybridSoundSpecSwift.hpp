@@ -413,6 +413,14 @@ namespace margelo::nitro::sound {
         std::rethrow_exception(__result.error());
       }
     }
+    inline std::shared_ptr<Promise<void>> teardownRemoteCommands() override {
+      auto __result = _swiftPart.teardownRemoteCommands();
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+      auto __value = std::move(__result.value());
+      return __value;
+    }
     inline void writeDebugLog(const std::string& message) override {
       auto __result = _swiftPart.writeDebugLog(message);
       if (__result.hasError()) [[unlikely]] {

@@ -280,6 +280,10 @@ abstract class HybridSoundSpec: HybridObject() {
   
   @DoNotStrip
   @Keep
+  abstract fun teardownRemoteCommands(): Promise<Unit>
+  
+  @DoNotStrip
+  @Keep
   abstract fun writeDebugLog(message: String): Unit
   
   @DoNotStrip

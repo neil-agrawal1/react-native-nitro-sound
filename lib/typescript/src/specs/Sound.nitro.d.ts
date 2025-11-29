@@ -130,6 +130,12 @@ export interface Sound extends HybridObject<{
     removePauseCallback(): void;
     setPlayCallback(callback: () => void): void;
     removePlayCallback(): void;
+    /**
+     * Completely tear down remote command center - removes all targets and clears Now Playing.
+     * Widget will disappear as if it was never configured.
+     * Call this when transitioning to night phase to hide lock screen controls.
+     */
+    teardownRemoteCommands(): Promise<void>;
     writeDebugLog(message: string): void;
     getDebugLogPath(): string;
     getAllDebugLogPaths(): string[];

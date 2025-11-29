@@ -591,6 +591,21 @@ namespace margelo::nitro::sound {
     static const auto method = javaClassStatic()->getMethod<void()>("removePlayCallback");
     method(_javaPart);
   }
+  std::shared_ptr<Promise<void>> JHybridSoundSpec::teardownRemoteCommands() {
+    static const auto method = javaClassStatic()->getMethod<jni::local_ref<JPromise::javaobject>()>("teardownRemoteCommands");
+    auto __result = method(_javaPart);
+    return [&]() {
+      auto __promise = Promise<void>::create();
+      __result->cthis()->addOnResolvedListener([=](const jni::alias_ref<jni::JObject>& /* unit */) {
+        __promise->resolve();
+      });
+      __result->cthis()->addOnRejectedListener([=](const jni::alias_ref<jni::JThrowable>& __throwable) {
+        jni::JniException __jniError(__throwable);
+        __promise->reject(std::make_exception_ptr(__jniError));
+      });
+      return __promise;
+    }();
+  }
   void JHybridSoundSpec::writeDebugLog(const std::string& message) {
     static const auto method = javaClassStatic()->getMethod<void(jni::alias_ref<jni::JString> /* message */)>("writeDebugLog");
     method(_javaPart, jni::make_jstring(message));
