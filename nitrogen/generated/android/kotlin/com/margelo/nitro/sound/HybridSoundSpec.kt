@@ -54,6 +54,14 @@ abstract class HybridSoundSpec: HybridObject() {
   
   @DoNotStrip
   @Keep
+  abstract fun initializePlaybackOnly(): Promise<Unit>
+  
+  @DoNotStrip
+  @Keep
+  abstract fun endPlaybackOnlySession(): Promise<Unit>
+  
+  @DoNotStrip
+  @Keep
   abstract fun setVADMode(): Promise<Unit>
   
   @DoNotStrip

@@ -85,6 +85,26 @@ export interface Sound
    */
   endEngineSession(): Promise<void>;
 
+  /**
+   * Initialize audio engine in playback-only mode (no microphone access).
+   * Used for standalone alarm mode when no session is running.
+   *
+   * IMPORTANT: This uses .playback category instead of .playAndRecord,
+   * so NO microphone indicator will be shown.
+   *
+   * Use endPlaybackOnlySession() to teardown - NOT endEngineSession()
+   * which would crash trying to access inputNode.
+   */
+  initializePlaybackOnly(): Promise<void>;
+
+  /**
+   * End playback-only session - safe teardown without inputNode access.
+   *
+   * Use this to teardown after initializePlaybackOnly(). If you used
+   * startRecorder() (with .playAndRecord), use endEngineSession() instead.
+   */
+  endPlaybackOnlySession(): Promise<void>;
+
   // Segment mode control (for alarm-based manual recording)
   setVADMode(): Promise<void>;
   setManualMode(): Promise<void>;

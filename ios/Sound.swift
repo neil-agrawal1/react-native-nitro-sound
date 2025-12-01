@@ -1649,6 +1649,194 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
         return promise
     }
 
+    /**
+     * Initialize audio engine in playback-only mode (no microphone access).
+     * Used for standalone alarm mode when no session is running.
+     *
+     * CRITICAL: This method uses .playback category instead of .playAndRecord.
+     * It MUST NOT access engine.inputNode - doing so with .playback category
+     * causes a crash: "required condition is false: IsFormatSampleRateAndChannelCountValid(format)"
+     *
+     * Use endPlaybackOnlySession() to teardown - NOT endEngineSession() which
+     * would crash trying to access inputNode.
+     */
+    public func initializePlaybackOnly() throws -> Promise<Void> {
+        let promise = Promise<Void>()
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else {
+                promise.reject(withError: RuntimeError.error(withMessage: "Self is nil"))
+                return
+            }
+
+            // Thread-safe initialization
+            self.engineInitLock.lock()
+            defer { self.engineInitLock.unlock() }
+
+            guard !self.audioEngineInitialized else {
+                self.bridgedLog("ℹ️ Engine already initialized - skipping playback-only initialization")
+                promise.resolve(withResult: ())
+                return
+            }
+
+            self.bridgedLog("🔧 Starting PLAYBACK-ONLY audio engine initialization...")
+            self.bridgedLog("   ⚠️ This mode does NOT access inputNode (would crash with .playback category)")
+
+            do {
+                // Setup audio session for playback only (NO mic indicator)
+                let audioSession = AVAudioSession.sharedInstance()
+
+                // Log current session state
+                let currentRoute = audioSession.currentRoute
+                self.bridgedLog("   📡 Current session state:")
+                self.bridgedLog("      Category: \(audioSession.category.rawValue)")
+                self.bridgedLog("      Route: [\(currentRoute.outputs.map { $0.portName }.joined(separator: ", "))]")
+
+                // Configure session for PLAYBACK ONLY - no mic access
+                self.bridgedLog("   🔧 Step 1: Configuring audio session for PLAYBACK ONLY...")
+                try audioSession.setCategory(.playback,
+                                            mode: .default,
+                                            options: [.mixWithOthers])
+                self.bridgedLog("   ✅ Session category set: .playback (no mic indicator)")
+
+                try audioSession.setPreferredSampleRate(44100)
+                self.bridgedLog("   ✅ Preferred sample rate set: 44100Hz")
+
+                // Activate session
+                self.bridgedLog("   🔧 Step 2: Activating audio session...")
+                do {
+                    try audioSession.setActive(true)
+                    self.bridgedLog("   ✅ Audio session activated successfully")
+                } catch {
+                    let nsError = error as NSError
+                    self.bridgedLog("   ❌ Session activation failed: \(error.localizedDescription) (code: \(nsError.code))")
+                    throw RuntimeError.error(withMessage: "Audio session activation failed: \(error.localizedDescription)")
+                }
+
+                // Create the audio engine
+                self.bridgedLog("   🔧 Step 3: Creating audio engine...")
+                self.audioEngine = AVAudioEngine()
+                guard let engine = self.audioEngine else {
+                    throw RuntimeError.error(withMessage: "Failed to create audio engine")
+                }
+                self.bridgedLog("   ✅ Audio engine created")
+
+                // Create player nodes for playback
+                self.bridgedLog("   🔧 Step 4: Creating player nodes...")
+                self.audioPlayerNodeA = AVAudioPlayerNode()
+                self.audioPlayerNodeB = AVAudioPlayerNode()
+                self.audioPlayerNodeC = AVAudioPlayerNode()
+                self.bridgedLog("   ✅ Player nodes created (A, B, C)")
+
+                // Attach nodes to engine
+                guard let playerA = self.audioPlayerNodeA,
+                    let playerB = self.audioPlayerNodeB,
+                    let playerC = self.audioPlayerNodeC else {
+                    throw RuntimeError.error(withMessage: "Failed to create audio engine components")
+                }
+
+                self.bridgedLog("   🔧 Step 5: Attaching nodes to engine...")
+                engine.attach(playerA)
+                engine.attach(playerB)
+                engine.attach(playerC)
+                self.bridgedLog("   ✅ All player nodes attached")
+
+                // Connect player nodes to main mixer
+                self.bridgedLog("   🔧 Step 6: Connecting nodes to mixer...")
+                let mainMixer = engine.mainMixerNode
+                engine.connect(playerA, to: mainMixer, format: nil)
+                engine.connect(playerB, to: mainMixer, format: nil)
+                engine.connect(playerC, to: mainMixer, format: nil)
+                self.bridgedLog("   ✅ All player nodes connected to main mixer")
+
+                // SKIP Step 7 - DO NOT access engine.inputNode with .playback category!
+                self.bridgedLog("   ℹ️ Step 7: SKIPPED - inputNode not initialized (playback-only mode)")
+
+                // Start engine
+                self.bridgedLog("   🔧 Step 8: Starting audio engine...")
+                try engine.start()
+                self.audioEngineInitialized = true
+                self.bridgedLog("   ✅ Audio engine started successfully")
+                self.bridgedLog("✅ PLAYBACK-ONLY engine initialization completed")
+
+                promise.resolve(withResult: ())
+            } catch {
+                let nsError = error as NSError
+                self.bridgedLog("   ❌ Playback-only engine init failed: \(error.localizedDescription) (code: \(nsError.code))")
+                self.audioEngineInitialized = false
+                promise.reject(withError: error)
+            }
+        }
+
+        return promise
+    }
+
+    /**
+     * End playback-only session - safe teardown without inputNode access.
+     *
+     * CRITICAL: This method MUST NOT access engine.inputNode. Use this to
+     * teardown after initializePlaybackOnly(). If you used initializeAudioEngine()
+     * (with .playAndRecord), use endEngineSession() instead.
+     */
+    public func endPlaybackOnlySession() throws -> Promise<Void> {
+        let promise = Promise<Void>()
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else {
+                promise.reject(withError: RuntimeError.error(withMessage: "Self is nil"))
+                return
+            }
+
+            self.bridgedLog("🔚 endPlaybackOnlySession() called - safe teardown (no inputNode access)")
+
+            // Step 1: Stop all player nodes
+            self.bridgedLog("   Stopping all player nodes...")
+            self.currentPlayerNode?.stop()
+            self.audioPlayerNodeA?.stop()
+            self.audioPlayerNodeB?.stop()
+            self.audioPlayerNodeC?.stop()
+
+            // Step 2: Stop the audio engine
+            // NOTE: We do NOT access engine.inputNode here - that would crash with .playback category
+            if let engine = self.audioEngine, engine.isRunning {
+                self.bridgedLog("   Stopping audio engine...")
+                engine.stop()
+            }
+
+            // Step 3: Deactivate audio session
+            let audioSession = AVAudioSession.sharedInstance()
+            self.bridgedLog("   Deactivating audio session...")
+            do {
+                try audioSession.setActive(false, options: .notifyOthersOnDeactivation)
+                self.bridgedLog("   ✅ Audio session deactivated")
+            } catch {
+                self.bridgedLog("   ⚠️ Failed to deactivate session: \(error.localizedDescription)")
+                // Continue cleanup even if deactivation fails
+            }
+
+            // Step 4: Destroy engine instance
+            self.bridgedLog("   Destroying engine instance...")
+            self.audioEngine = nil
+            self.audioPlayerNodeA = nil
+            self.audioPlayerNodeB = nil
+            self.audioPlayerNodeC = nil
+            self.audioEngineInitialized = false
+
+            // Step 5: Reset playback state
+            self.currentPlayerNode = nil
+            self.currentAudioFile = nil
+            self.currentAmbientFile = nil
+            self.isAmbientLoopPlaying = false
+            self.shouldLoopPlayback = false
+            self.currentPlaybackURI = nil
+
+            self.bridgedLog("✅ endPlaybackOnlySession() completed - playback resources destroyed")
+            promise.resolve(withResult: ())
+        }
+
+        return promise
+    }
+
     // MARK: - Mode Control Methods
 
     public func setManualMode() throws -> Promise<Void> {

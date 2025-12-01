@@ -97,6 +97,22 @@ namespace margelo::nitro::sound {
       auto __value = std::move(__result.value());
       return __value;
     }
+    inline std::shared_ptr<Promise<void>> initializePlaybackOnly() override {
+      auto __result = _swiftPart.initializePlaybackOnly();
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+      auto __value = std::move(__result.value());
+      return __value;
+    }
+    inline std::shared_ptr<Promise<void>> endPlaybackOnlySession() override {
+      auto __result = _swiftPart.endPlaybackOnlySession();
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+      auto __value = std::move(__result.value());
+      return __value;
+    }
     inline std::shared_ptr<Promise<void>> setVADMode() override {
       auto __result = _swiftPart.setVADMode();
       if (__result.hasError()) [[unlikely]] {
