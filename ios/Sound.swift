@@ -463,7 +463,7 @@ import MediaPlayer
         bridgedLog("   🔧 Step 1: Configuring audio session...")
         try audioSession.setCategory(.playAndRecord,
                                     mode: .default,
-                                    options: [.defaultToSpeaker, .allowBluetooth])
+                                    options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP])
         bridgedLog("   ✅ Session category set: .playAndRecord")
         
         try audioSession.setPreferredSampleRate(44100)
