@@ -429,128 +429,63 @@ import MediaPlayer
             return
         }
 
-        bridgedLog("🔧 Starting audio engine initialization...")
-        logStateSnapshot(context: "before-engine-init")
-        
-        // Check if we're initializing during active recording (shouldn't happen, but log it)
-        let modeDescription: String
-        switch currentMode {
-        case .idle:
-            modeDescription = "idle"
-        case .manual:
-            modeDescription = "manual"
-        case .autoVAD:
-            modeDescription = "autoVAD"
-        }
-        let hasActiveSegment = currentSegmentFile != nil
-        if currentMode != .idle || hasActiveSegment {
-            bridgedLog("   ⚠️ WARNING: Initializing engine during active recording session!")
-            bridgedLog("   ⚠️ Recording mode: \(modeDescription), segmentActive: \(hasActiveSegment)")
-        }
+        bridgedLog("🔧 Initializing audio engine (playAndRecord)...")
 
-        // Setup audio session ONCE for recording + playback
+        // Setup audio session for recording + playback
         let audioSession = AVAudioSession.sharedInstance()
-        
-        // Log current session state
-        let currentRoute = audioSession.currentRoute
-        bridgedLog("   📡 Current session state:")
-        bridgedLog("      Category: \(audioSession.category.rawValue)")
-        bridgedLog("      Route: [\(currentRoute.outputs.map { $0.portName }.joined(separator: ", "))]")
-        bridgedLog("      Sample rate: \(audioSession.sampleRate)Hz")
-        bridgedLog("      Input channels: \(audioSession.inputNumberOfChannels)")
-        
-        // Configure session category and settings first
-        bridgedLog("   🔧 Step 1: Configuring audio session...")
+
         try audioSession.setCategory(.playAndRecord,
                                     mode: .default,
                                     options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP])
-        bridgedLog("   ✅ Session category set: .playAndRecord")
-        
         try audioSession.setPreferredSampleRate(44100)
-        bridgedLog("   ✅ Preferred sample rate set: 44100Hz")
-        
-        // Only set mono input if hardware supports it
         if audioSession.maximumInputNumberOfChannels >= 1 {
             try? audioSession.setPreferredInputNumberOfChannels(1)
-            bridgedLog("   ✅ Preferred input channels set: 1 (mono)")
-        } else {
-            bridgedLog("   ℹ️ Hardware doesn't support mono input - using default")
         }
-        
-        try audioSession.setPreferredIOBufferDuration(0.0232) // ~23ms
-        bridgedLog("   ✅ Preferred I/O buffer duration set: 0.0232s (~23ms)")
-        
-        // Activate session - CRITICAL: This must succeed for engine to work
-        // If this fails (e.g., in background), we throw so caller knows to retry when app wakes
-        bridgedLog("   🔧 Step 2: Activating audio session...")
+        try audioSession.setPreferredIOBufferDuration(0.0232)
+
         do {
             try audioSession.setActive(true)
-            bridgedLog("   ✅ Audio session activated successfully")
         } catch {
-            // Session activation failed - this means we can't use audio right now
-            // This can happen if app is suspended in background after interruption
-            // The caller (alarm/silent loop) should retry when app wakes up
             let nsError = error as NSError
-            bridgedLog("   ❌ Session activation failed: \(error.localizedDescription) (code: \(nsError.code))")
-            bridgedLog("   ⚠️ This may happen if app is suspended in background")
-            bridgedLog("   ⚠️ Will need to retry when app wakes (alarm will trigger this)")
+            bridgedLog("❌ Session activation failed: \(error.localizedDescription) (code: \(nsError.code))")
             throw RuntimeError.error(withMessage: "Audio session activation failed - app may be suspended. Retry when app wakes: \(error.localizedDescription)")
         }
 
-        // Create the unified audio engine
-        bridgedLog("   🔧 Step 3: Creating audio engine...")
+        // Create engine and player nodes
         audioEngine = AVAudioEngine()
         guard let engine = audioEngine else {
             throw RuntimeError.error(withMessage: "Failed to create audio engine")
         }
-        bridgedLog("   ✅ Audio engine created")
 
-        // Create player nodes for crossfading support
-        bridgedLog("   🔧 Step 4: Creating player nodes...")
         audioPlayerNodeA = AVAudioPlayerNode()
         audioPlayerNodeB = AVAudioPlayerNode()
         audioPlayerNodeC = AVAudioPlayerNode()
-        bridgedLog("   ✅ Player nodes created (A, B, C)")
 
-        // Attach nodes to engine
         guard let playerA = audioPlayerNodeA,
             let playerB = audioPlayerNodeB,
             let playerC = audioPlayerNodeC else {
             throw RuntimeError.error(withMessage: "Failed to create audio engine components")
         }
 
-        bridgedLog("   🔧 Step 5: Attaching nodes to engine...")
         engine.attach(playerA)
         engine.attach(playerB)
         engine.attach(playerC)
-        bridgedLog("   ✅ All player nodes attached")
 
-        // Connect player nodes to main mixer
-        bridgedLog("   🔧 Step 6: Connecting nodes to mixer...")
         let mainMixer = engine.mainMixerNode
         engine.connect(playerA, to: mainMixer, format: nil)
         engine.connect(playerB, to: mainMixer, format: nil)
         engine.connect(playerC, to: mainMixer, format: nil)
-        bridgedLog("   ✅ All player nodes connected to main mixer")
 
-        // Force input node initialization by accessing it (required for .playAndRecord)
-        bridgedLog("   🔧 Step 7: Initializing input node...")
-        let inputNode = engine.inputNode
-        let inputFormat = inputNode.outputFormat(forBus: 0)
-        bridgedLog("   ✅ Input node initialized")
-        bridgedLog("      Input format: \(Int(inputFormat.sampleRate))Hz, \(inputFormat.channelCount) channels")
+        // Initialize input node (required for .playAndRecord)
+        let _ = engine.inputNode
 
-        // Now safe to start engine with both input and output configured
-        bridgedLog("   🔧 Step 8: Starting audio engine...")
         do {
             try engine.start()
             audioEngineInitialized = true
-            bridgedLog("   ✅ Audio engine started successfully")
-            bridgedLog("✅ Engine initialization completed successfully")
-            logStateSnapshot(context: "after-engine-init")
+            bridgedLog("✅ Audio engine ready (playAndRecord, \(Int(audioSession.sampleRate))Hz)")
         } catch {
             let nsError = error as NSError
-            bridgedLog("   ❌ Engine start failed: \(error.localizedDescription) (code: \(nsError.code))")
+            bridgedLog("❌ Engine start failed: \(error.localizedDescription) (code: \(nsError.code))")
             audioEngineInitialized = false
             throw error
         }
@@ -808,7 +743,6 @@ import MediaPlayer
                         duration: durationSeconds,
                         currentTime: targetTime
                     )
-                    self.bridgedLog("📍 Updated Now Playing after seek to \(targetTime)s")
                 }
 
                 return .success
@@ -881,8 +815,6 @@ import MediaPlayer
 
         // Update the info center
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nowPlayingInfo
-
-        bridgedLog("🎵 Updated Now Playing: title=\(title), duration=\(duration)s, currentTime=\(currentTime)s, isLiveStream=false")
 
         // Cache values
         self.currentTrackTitle = title
@@ -1679,90 +1611,48 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                 return
             }
 
-            self.bridgedLog("🔧 Starting PLAYBACK-ONLY audio engine initialization...")
-            self.bridgedLog("   ⚠️ This mode does NOT access inputNode (would crash with .playback category)")
+            self.bridgedLog("🔧 Initializing audio engine (playback-only)...")
 
             do {
-                // Setup audio session for playback only (NO mic indicator)
                 let audioSession = AVAudioSession.sharedInstance()
 
-                // Log current session state
-                let currentRoute = audioSession.currentRoute
-                self.bridgedLog("   📡 Current session state:")
-                self.bridgedLog("      Category: \(audioSession.category.rawValue)")
-                self.bridgedLog("      Route: [\(currentRoute.outputs.map { $0.portName }.joined(separator: ", "))]")
-
-                // Configure session for PLAYBACK ONLY - no mic access
-                self.bridgedLog("   🔧 Step 1: Configuring audio session for PLAYBACK ONLY...")
-                try audioSession.setCategory(.playback,
-                                            mode: .default,
-                                            options: [.mixWithOthers])
-                self.bridgedLog("   ✅ Session category set: .playback (no mic indicator)")
-
+                try audioSession.setCategory(.playback, mode: .default, options: [.mixWithOthers])
                 try audioSession.setPreferredSampleRate(44100)
-                self.bridgedLog("   ✅ Preferred sample rate set: 44100Hz")
+                try audioSession.setActive(true)
 
-                // Activate session
-                self.bridgedLog("   🔧 Step 2: Activating audio session...")
-                do {
-                    try audioSession.setActive(true)
-                    self.bridgedLog("   ✅ Audio session activated successfully")
-                } catch {
-                    let nsError = error as NSError
-                    self.bridgedLog("   ❌ Session activation failed: \(error.localizedDescription) (code: \(nsError.code))")
-                    throw RuntimeError.error(withMessage: "Audio session activation failed: \(error.localizedDescription)")
-                }
-
-                // Create the audio engine
-                self.bridgedLog("   🔧 Step 3: Creating audio engine...")
                 self.audioEngine = AVAudioEngine()
                 guard let engine = self.audioEngine else {
                     throw RuntimeError.error(withMessage: "Failed to create audio engine")
                 }
-                self.bridgedLog("   ✅ Audio engine created")
 
-                // Create player nodes for playback
-                self.bridgedLog("   🔧 Step 4: Creating player nodes...")
                 self.audioPlayerNodeA = AVAudioPlayerNode()
                 self.audioPlayerNodeB = AVAudioPlayerNode()
                 self.audioPlayerNodeC = AVAudioPlayerNode()
-                self.bridgedLog("   ✅ Player nodes created (A, B, C)")
 
-                // Attach nodes to engine
                 guard let playerA = self.audioPlayerNodeA,
                     let playerB = self.audioPlayerNodeB,
                     let playerC = self.audioPlayerNodeC else {
                     throw RuntimeError.error(withMessage: "Failed to create audio engine components")
                 }
 
-                self.bridgedLog("   🔧 Step 5: Attaching nodes to engine...")
                 engine.attach(playerA)
                 engine.attach(playerB)
                 engine.attach(playerC)
-                self.bridgedLog("   ✅ All player nodes attached")
 
-                // Connect player nodes to main mixer
-                self.bridgedLog("   🔧 Step 6: Connecting nodes to mixer...")
                 let mainMixer = engine.mainMixerNode
                 engine.connect(playerA, to: mainMixer, format: nil)
                 engine.connect(playerB, to: mainMixer, format: nil)
                 engine.connect(playerC, to: mainMixer, format: nil)
-                self.bridgedLog("   ✅ All player nodes connected to main mixer")
 
-                // SKIP Step 7 - DO NOT access engine.inputNode with .playback category!
-                self.bridgedLog("   ℹ️ Step 7: SKIPPED - inputNode not initialized (playback-only mode)")
-
-                // Start engine
-                self.bridgedLog("   🔧 Step 8: Starting audio engine...")
+                // NOTE: Do NOT access inputNode with .playback category
                 try engine.start()
                 self.audioEngineInitialized = true
-                self.bridgedLog("   ✅ Audio engine started successfully")
-                self.bridgedLog("✅ PLAYBACK-ONLY engine initialization completed")
+                self.bridgedLog("✅ Audio engine ready (playback-only, \(Int(audioSession.sampleRate))Hz)")
 
                 promise.resolve(withResult: ())
             } catch {
                 let nsError = error as NSError
-                self.bridgedLog("   ❌ Playback-only engine init failed: \(error.localizedDescription) (code: \(nsError.code))")
+                self.bridgedLog("❌ Playback-only init failed: \(error.localizedDescription) (code: \(nsError.code))")
                 self.audioEngineInitialized = false
                 promise.reject(withError: error)
             }
@@ -2609,8 +2499,6 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
             ? String(imagePath.dropFirst(7))
             : imagePath
 
-        bridgedLog("🖼️ Setting Now Playing artwork from: \(cleanPath)")
-
         // Load the image from the path
         guard let image = UIImage(contentsOfFile: cleanPath) else {
             bridgedLog("⚠️ Failed to load artwork image from: \(cleanPath)")
@@ -2630,9 +2518,6 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
         if var nowPlayingInfo = MPNowPlayingInfoCenter.default().nowPlayingInfo {
             nowPlayingInfo[MPMediaItemPropertyArtwork] = artwork
             MPNowPlayingInfoCenter.default().nowPlayingInfo = nowPlayingInfo
-            bridgedLog("✅ Now Playing artwork updated")
-        } else {
-            bridgedLog("ℹ️ Artwork stored, will be used when Now Playing info is set")
         }
 
         promise.resolve(withResult: ())
