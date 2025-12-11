@@ -1023,10 +1023,6 @@ import MediaPlayer
         try FileManager.default.removeItem(at: fileURL)
         try FileManager.default.moveItem(at: tempURL, to: fileURL)
 
-        let outputDuration = Double(totalFramesConverted) / outputFormat.sampleRate
-        if outputDuration > 0.1 {
-            bridgedLog("🔄 Resampled 16kHz → 44.1kHz (\(String(format: "%.1f", outputDuration))s)")
-        }
     }
 
         // Replace your existing startNewSegment() with this version:
@@ -1307,12 +1303,6 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
 
                                     // Update state for next chunk
                                     self.vadStreamState = streamResult.state
-
-                                    // Log VAD state every ~3 seconds (50 frames * ~64ms per frame)
-                                    if self.tapFrameCounter % 50 == 0 {
-                                        self.bridgedLog("🎙️ VAD triggered=\(streamResult.state.triggered) threshold=\(self.vadThreshold) samples=\(streamResult.state.processedSamples)")
-                                    }
-
                                 } catch {
                                     // VAD processing error - state stays at previous value (silent fail)
                                 }
@@ -1380,30 +1370,23 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                     // In manual mode with active segment, detect silence for automatic progression
                     if audioIsLoud {
                         // Reset silence counter on speech
-                        if self.manualSilenceFrameCount > 0 {
-                            let elapsedSeconds = Double(self.manualSilenceFrameCount) / 14.0
-                            self.bridgedLog("🔊 SPEECH DETECTED - resetting silence counter (was at \(self.manualSilenceFrameCount) frames / \(String(format: "%.1f", elapsedSeconds))s)")
-                            self.manualSilenceFrameCount = 0
-                        }
+                        self.manualSilenceFrameCount = 0
                     } else {
                         // Increment silence counter
                         self.manualSilenceFrameCount += 1
 
-                        // Log every 50 frames (~3.5s at 14fps) to track progress
-                        if self.manualSilenceFrameCount % 50 == 0 {
-                            let thresholdSeconds = Double(self.manualSilenceThreshold) / 14.0
-                            let elapsedSeconds = Double(self.manualSilenceFrameCount) / 14.0
-                            self.bridgedLog("🔇 Silence detected: \(self.manualSilenceFrameCount)/\(self.manualSilenceThreshold) frames (\(String(format: "%.1f", elapsedSeconds))s / \(String(format: "%.1f", thresholdSeconds))s)")
+                        // Log every ~1 second (14 frames) to show detection is running
+                        if self.manualSilenceFrameCount % 14 == 0 {
+                            let elapsed = self.manualSilenceFrameCount / 14
+                            let total = self.manualSilenceThreshold / 14
+                            self.bridgedLog("🔇 Listening... \(elapsed)/\(total)s silence")
                         }
 
                         if self.manualSilenceFrameCount >= self.manualSilenceThreshold {
-                            let thresholdSeconds = Double(self.manualSilenceThreshold) / 14.0
-                            self.bridgedLog("⚠️ SILENCE TIMEOUT: \(self.manualSilenceFrameCount)/\(self.manualSilenceThreshold) frames reached (\(String(format: "%.1f", thresholdSeconds))s)")
                             self.manualSilenceFrameCount = 0  // Reset counter
 
                             // Close segment and get metadata (NO callback yet)
                             guard let metadata = self.endCurrentSegmentWithoutCallback() else {
-                                self.bridgedLog("⚠️ No segment to end")
                                 return
                             }
 
@@ -1415,7 +1398,6 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                             let shouldTrim = silenceDurationSeconds > 2.0  // If timeout > 2s, it's a dream segment
                             let trimAmount = shouldTrim ? silenceDurationSeconds : 0.0
 
-                            self.bridgedLog("🔧 Trim decision: timeout=\(String(format: "%.1f", silenceDurationSeconds))s, trim=\(shouldTrim ? "YES" : "NO")")
                             self.processAndFireSegmentCallback(metadata: metadata, trimSeconds: trimAmount)
 
                             // Notify JavaScript via callback
@@ -1800,6 +1782,7 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
 
             // Start new manual segment
             self.startNewSegment(with: targetFormat)
+            self.bridgedLog("🎙️ Recording started (silence timeout: \(Int(timeoutSeconds))s)")
 
             promise.resolve(withResult: ())
         }
@@ -1951,8 +1934,8 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                 try self.initializeAudioEngine()
                 try self.ensureEngineRunning()
 
-                // Setup Now Playing controls (idempotent - safe to call multiple times)
-                self.setupRemoteCommandCenter()
+                // Note: Remote commands are NOT set up here - they're only set up
+                // when updateNowPlaying() is explicitly called (evening phases only)
 
                 guard let uri = uri, !uri.isEmpty else {
                     self.bridgedLog("❌ PLAYBACK: No URI provided")
@@ -2426,6 +2409,8 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
     // MARK: - Public Now Playing Methods
 
     /// Public method to update Now Playing info from TypeScript
+    /// This also sets up remote commands (play/pause buttons on lock screen)
+    /// Only call this during phases where lock screen controls are wanted (evening)
     public func updateNowPlaying(
         title: String,
         artist: String,
@@ -2433,6 +2418,10 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
         currentTime: Double
     ) throws -> Promise<Void> {
         let promise = Promise<Void>()
+
+        // Setup remote commands when Now Playing is explicitly requested
+        // This ensures lock screen controls only appear during evening phases
+        setupRemoteCommandCenter()
 
         updateNowPlayingInfo(
             title: title,
