@@ -2651,16 +2651,12 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
     }
 
     private func bridgedLog(_ message: String) {
-        // Log to file for debugging
-        FileLogger.shared.log(message)
-
-        // Send to JavaScript if callback is available
+        // Send to JavaScript - JS Logger will handle console + file logging
         if let callback = self.logCallback {
             DispatchQueue.main.async {
                 callback(message)
             }
         }
-        // NSLog removed to prevent duplicate logs in file logging system
     }
 
     public func writeDebugLog(message: String) throws {
