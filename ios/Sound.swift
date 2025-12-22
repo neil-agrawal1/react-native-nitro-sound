@@ -2237,6 +2237,12 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
 
         if let playerNode = self.currentPlayerNode {
             playerNode.pause()
+
+            // Also pause ambient loop if playing
+            if isAmbientLoopPlaying, let playerC = audioPlayerNodeC {
+                playerC.pause()
+            }
+
             self.stopPlayTimer()
             self.updateNowPlayingPlaybackState(isPlaying: false)
             promise.resolve(withResult: "Player paused")
@@ -2252,6 +2258,12 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
 
         if let playerNode = self.currentPlayerNode {
             playerNode.play()
+
+            // Also resume ambient loop if it was playing
+            if isAmbientLoopPlaying, let playerC = audioPlayerNodeC {
+                playerC.play()
+            }
+
             self.updateNowPlayingPlaybackState(isPlaying: true)
             DispatchQueue.main.async {
                 self.startPlayTimer()
