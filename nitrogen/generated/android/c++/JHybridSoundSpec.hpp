@@ -82,6 +82,7 @@ namespace margelo::nitro::sound {
     std::shared_ptr<Promise<std::string>> setLoopEnabled(bool enabled) override;
     std::shared_ptr<Promise<void>> restartEngine() override;
     std::shared_ptr<Promise<std::string>> crossfadeTo(const std::string& uri, std::optional<double> duration, std::optional<double> targetVolume) override;
+    std::shared_ptr<Promise<void>> fadeVolumeTo(double targetVolume, double duration) override;
     std::shared_ptr<Promise<void>> startAmbientLoop(const std::string& uri, double volume) override;
     std::shared_ptr<Promise<void>> stopAmbientLoop(std::optional<double> fadeDuration) override;
     void setSubscriptionDuration(double sec) override;

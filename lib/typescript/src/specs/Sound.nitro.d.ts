@@ -128,6 +128,7 @@ export interface Sound extends HybridObject<{
     setLoopEnabled(enabled: boolean): Promise<string>;
     restartEngine(): Promise<void>;
     crossfadeTo(uri: string, duration?: number, targetVolume?: number): Promise<string>;
+    fadeVolumeTo(targetVolume: number, duration: number): Promise<void>;
     startAmbientLoop(uri: string, volume: number): Promise<void>;
     stopAmbientLoop(fadeDuration?: number): Promise<void>;
     setSubscriptionDuration(sec: number): void;

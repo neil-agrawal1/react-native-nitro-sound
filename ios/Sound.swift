@@ -2917,6 +2917,40 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
         return promise
     }
 
+    // MARK: - Volume Fade Methods
+
+    /// Smoothly fade the main player's volume to a target value using native equal-power curve.
+    /// This eliminates the jitter and clicking that occurs with JS-based volume stepping.
+    public func fadeVolumeTo(targetVolume: Double, duration: Double) throws -> Promise<Void> {
+        let promise = Promise<Void>()
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else {
+                promise.reject(withError: RuntimeError.error(withMessage: "Self is nil"))
+                return
+            }
+
+            guard let playerNode = self.currentPlayerNode else {
+                // No player node - resolve immediately (nothing to fade)
+                self.bridgedLog("⚠️ fadeVolumeTo: No current player node, resolving immediately")
+                promise.resolve(withResult: ())
+                return
+            }
+
+            let currentVolume = playerNode.volume
+            let target = Float(max(0.0, min(1.0, targetVolume)))  // Clamp to 0-1
+
+            self.bridgedLog("🔊 fadeVolumeTo: \(currentVolume) → \(target) over \(duration)s")
+
+            self.fadeVolume(node: playerNode, from: currentVolume, to: target, duration: duration) {
+                self.bridgedLog("🔊 fadeVolumeTo: Complete ✓")
+                promise.resolve(withResult: ())
+            }
+        }
+
+        return promise
+    }
+
     // MARK: - Ambient Loop Methods
     public func startAmbientLoop(uri: String, volume: Double) throws -> Promise<Void> {
         let promise = Promise<Void>()

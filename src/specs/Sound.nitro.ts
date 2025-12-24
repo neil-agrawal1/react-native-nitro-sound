@@ -173,6 +173,9 @@ export interface Sound
   // Crossfade methods
   crossfadeTo(uri: string, duration?: number, targetVolume?: number): Promise<string>;
 
+  // Volume fade (smooth native fade using equal-power curve)
+  fadeVolumeTo(targetVolume: number, duration: number): Promise<void>;
+
   // Ambient loop methods
   startAmbientLoop(uri: string, volume: number): Promise<void>;
   stopAmbientLoop(fadeDuration?: number): Promise<void>;

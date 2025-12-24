@@ -43,6 +43,7 @@ namespace margelo::nitro::sound {
       prototype.registerHybridMethod("setLoopEnabled", &HybridSoundSpec::setLoopEnabled);
       prototype.registerHybridMethod("restartEngine", &HybridSoundSpec::restartEngine);
       prototype.registerHybridMethod("crossfadeTo", &HybridSoundSpec::crossfadeTo);
+      prototype.registerHybridMethod("fadeVolumeTo", &HybridSoundSpec::fadeVolumeTo);
       prototype.registerHybridMethod("startAmbientLoop", &HybridSoundSpec::startAmbientLoop);
       prototype.registerHybridMethod("stopAmbientLoop", &HybridSoundSpec::stopAmbientLoop);
       prototype.registerHybridMethod("setSubscriptionDuration", &HybridSoundSpec::setSubscriptionDuration);
