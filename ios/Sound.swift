@@ -21,8 +21,11 @@ import MediaPlayer
     private var currentPlayerNode: AVAudioPlayerNode?
     private var currentAudioFile: AVAudioFile?
 
-    // Ambient loop player (independent layer)
+    // Third crossfade player (part of A/B/C rotation)
     private var audioPlayerNodeC: AVAudioPlayerNode?
+
+    // Ambient loop player (dedicated, independent layer - never used for crossfade)
+    private var audioPlayerNodeD: AVAudioPlayerNode?
     private var isAmbientLoopPlaying: Bool = false
     private var currentAmbientFile: AVAudioFile?
     private var currentLoopingFileURI: String?
@@ -255,24 +258,24 @@ import MediaPlayer
                         }
                         
                         // Resume ambient loop if it was playing
-                        if isAmbientLoopPlaying, let playerC = audioPlayerNodeC, let ambientFile = currentAmbientFile {
+                        if isAmbientLoopPlaying, let playerD = audioPlayerNodeD, let ambientFile = currentAmbientFile {
                             bridgedLog("🔄 Resuming ambient loop after interruption")
-                            bridgedLog("   Ambient player state: isPlaying=\(playerC.isPlaying)")
-                            if !playerC.isPlaying {
+                            bridgedLog("   Ambient player state: isPlaying=\(playerD.isPlaying)")
+                            if !playerD.isPlaying {
                                 bridgedLog("   Ambient player stopped - restarting")
                                 // Reschedule multiple iterations for seamless looping
-                                playerC.scheduleFile(ambientFile, at: nil, completionHandler: nil)
-                                playerC.scheduleFile(ambientFile, at: nil, completionHandler: nil)
-                                playerC.scheduleFile(ambientFile, at: nil) { [weak self] in
-                                    self?.scheduleMoreAmbientLoops(audioFile: ambientFile, playerNode: playerC)
+                                playerD.scheduleFile(ambientFile, at: nil, completionHandler: nil)
+                                playerD.scheduleFile(ambientFile, at: nil, completionHandler: nil)
+                                playerD.scheduleFile(ambientFile, at: nil) { [weak self] in
+                                    self?.scheduleMoreAmbientLoops(audioFile: ambientFile, playerNode: playerD)
                                 }
-                                playerC.play()
+                                playerD.play()
                                 bridgedLog("   ✅ Ambient loop restarted")
                             } else {
                                 bridgedLog("   Ambient player already playing - no restart needed")
                             }
                         } else {
-                            bridgedLog("   No ambient loop to resume (isAmbientLoopPlaying=\(isAmbientLoopPlaying), playerC=\(audioPlayerNodeC != nil), ambientFile=\(currentAmbientFile != nil))")
+                            bridgedLog("   No ambient loop to resume (isAmbientLoopPlaying=\(isAmbientLoopPlaying), playerD=\(audioPlayerNodeD != nil), ambientFile=\(currentAmbientFile != nil))")
                         }
                         
                         bridgedLog("🔄 Playback resume attempt completed")
@@ -393,6 +396,7 @@ import MediaPlayer
                     audioPlayerNodeA = nil
                     audioPlayerNodeB = nil
                     audioPlayerNodeC = nil
+                    audioPlayerNodeD = nil
                     audioEngineInitialized = false
                     bridgedLog("   ✅ Engine destroyed - will reinitialize on next operation")
                     // Don't throw - allow graceful degradation, next operation will fully reinitialize
@@ -457,21 +461,25 @@ import MediaPlayer
         audioPlayerNodeA = AVAudioPlayerNode()
         audioPlayerNodeB = AVAudioPlayerNode()
         audioPlayerNodeC = AVAudioPlayerNode()
+        audioPlayerNodeD = AVAudioPlayerNode()  // Dedicated ambient loop player
 
         guard let playerA = audioPlayerNodeA,
             let playerB = audioPlayerNodeB,
-            let playerC = audioPlayerNodeC else {
+            let playerC = audioPlayerNodeC,
+            let playerD = audioPlayerNodeD else {
             throw RuntimeError.error(withMessage: "Failed to create audio engine components")
         }
 
         engine.attach(playerA)
         engine.attach(playerB)
         engine.attach(playerC)
+        engine.attach(playerD)
 
         let mainMixer = engine.mainMixerNode
         engine.connect(playerA, to: mainMixer, format: nil)
         engine.connect(playerB, to: mainMixer, format: nil)
         engine.connect(playerC, to: mainMixer, format: nil)
+        engine.connect(playerD, to: mainMixer, format: nil)
 
         // Initialize input node (required for .playAndRecord)
         let _ = engine.inputNode
@@ -1480,6 +1488,7 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
             self.audioPlayerNodeA?.stop()
             self.audioPlayerNodeB?.stop()
             self.audioPlayerNodeC?.stop()
+            self.audioPlayerNodeD?.stop()
 
             // Step 3: Remove microphone tap
             if let engine = self.audioEngine {
@@ -1510,6 +1519,7 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
             self.audioPlayerNodeA = nil
             self.audioPlayerNodeB = nil
             self.audioPlayerNodeC = nil
+            self.audioPlayerNodeD = nil
             self.audioEngineInitialized = false
 
             // Step 7: Clean up recording resources
@@ -1582,21 +1592,25 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                 self.audioPlayerNodeA = AVAudioPlayerNode()
                 self.audioPlayerNodeB = AVAudioPlayerNode()
                 self.audioPlayerNodeC = AVAudioPlayerNode()
+                self.audioPlayerNodeD = AVAudioPlayerNode()  // Dedicated ambient loop player
 
                 guard let playerA = self.audioPlayerNodeA,
                     let playerB = self.audioPlayerNodeB,
-                    let playerC = self.audioPlayerNodeC else {
+                    let playerC = self.audioPlayerNodeC,
+                    let playerD = self.audioPlayerNodeD else {
                     throw RuntimeError.error(withMessage: "Failed to create audio engine components")
                 }
 
                 engine.attach(playerA)
                 engine.attach(playerB)
                 engine.attach(playerC)
+                engine.attach(playerD)
 
                 let mainMixer = engine.mainMixerNode
                 engine.connect(playerA, to: mainMixer, format: nil)
                 engine.connect(playerB, to: mainMixer, format: nil)
                 engine.connect(playerC, to: mainMixer, format: nil)
+                engine.connect(playerD, to: mainMixer, format: nil)
 
                 // NOTE: Do NOT access inputNode with .playback category
                 try engine.start()
@@ -1639,6 +1653,7 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
             self.audioPlayerNodeA?.stop()
             self.audioPlayerNodeB?.stop()
             self.audioPlayerNodeC?.stop()
+            self.audioPlayerNodeD?.stop()
 
             // Step 2: Stop the audio engine
             // NOTE: We do NOT access engine.inputNode here - that would crash with .playback category
@@ -1664,6 +1679,7 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
             self.audioPlayerNodeA = nil
             self.audioPlayerNodeB = nil
             self.audioPlayerNodeC = nil
+            self.audioPlayerNodeD = nil
             self.audioEngineInitialized = false
 
             // Step 5: Reset playback state
@@ -2166,11 +2182,11 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
             playerB.volume = 1.0 // Reset volume
         }
 
-        // Stop ambient loop if playing
-        if self.isAmbientLoopPlaying, let playerC = self.audioPlayerNodeC {
-            playerC.stop()
-            playerC.reset()
-            playerC.volume = 1.0
+        // Stop ambient loop if playing (uses dedicated Player D)
+        if self.isAmbientLoopPlaying, let playerD = self.audioPlayerNodeD {
+            playerD.stop()
+            playerD.reset()
+            playerD.volume = 1.0
             self.isAmbientLoopPlaying = false
             self.currentAmbientFile = nil
         }
@@ -2208,9 +2224,9 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
         if let playerNode = self.currentPlayerNode {
             playerNode.pause()
 
-            // Also pause ambient loop if playing
-            if isAmbientLoopPlaying, let playerC = audioPlayerNodeC {
-                playerC.pause()
+            // Also pause ambient loop if playing (uses dedicated Player D)
+            if isAmbientLoopPlaying, let playerD = audioPlayerNodeD {
+                playerD.pause()
             }
 
             self.stopPlayTimer()
@@ -2229,9 +2245,9 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
         if let playerNode = self.currentPlayerNode {
             playerNode.play()
 
-            // Also resume ambient loop if it was playing
-            if isAmbientLoopPlaying, let playerC = audioPlayerNodeC {
-                playerC.play()
+            // Also resume ambient loop if it was playing (uses dedicated Player D)
+            if isAmbientLoopPlaying, let playerD = audioPlayerNodeD {
+                playerD.play()
             }
 
             self.updateNowPlayingPlaybackState(isPlaying: true)
@@ -2916,7 +2932,7 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                 try self.initializeAudioEngine()
                 try self.ensureEngineRunning()
 
-                guard let playerC = self.audioPlayerNodeC else {
+                guard let playerD = self.audioPlayerNodeD else {
                     promise.reject(withError: RuntimeError.error(withMessage: "Ambient player not initialized"))
                     return
                 }
@@ -2942,22 +2958,22 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
 
                 // Stop if already playing
                 if self.isAmbientLoopPlaying {
-                    playerC.stop()
-                    playerC.reset()
+                    playerD.stop()
+                    playerD.reset()
                 }
 
                 // Set volume
-                playerC.volume = Float(volume)
+                playerD.volume = Float(volume)
 
                 // Schedule for looping (pre-schedule 3 iterations)
-                playerC.scheduleFile(audioFile, at: nil, completionHandler: nil)
-                playerC.scheduleFile(audioFile, at: nil, completionHandler: nil)
-                playerC.scheduleFile(audioFile, at: nil) { [weak self] in
-                    self?.scheduleMoreAmbientLoops(audioFile: audioFile, playerNode: playerC)
+                playerD.scheduleFile(audioFile, at: nil, completionHandler: nil)
+                playerD.scheduleFile(audioFile, at: nil, completionHandler: nil)
+                playerD.scheduleFile(audioFile, at: nil) { [weak self] in
+                    self?.scheduleMoreAmbientLoops(audioFile: audioFile, playerNode: playerD)
                 }
 
                 // Play
-                playerC.play()
+                playerD.play()
                 self.isAmbientLoopPlaying = true
 
                 self.bridgedLog("🎵 Ambient loop started at \(Int(volume * 100))% volume")
@@ -2981,7 +2997,7 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                 return
             }
 
-            guard let playerC = self.audioPlayerNodeC else {
+            guard let playerD = self.audioPlayerNodeD else {
                 promise.resolve(withResult: ())
                 return
             }
@@ -2995,9 +3011,9 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
 
             if duration > 0 {
                 // Fade out
-                self.fadeVolume(node: playerC, from: playerC.volume, to: 0.0, duration: duration) {
-                    playerC.stop()
-                    playerC.reset()
+                self.fadeVolume(node: playerD, from: playerD.volume, to: 0.0, duration: duration) {
+                    playerD.stop()
+                    playerD.reset()
                     self.isAmbientLoopPlaying = false
                     self.currentAmbientFile = nil
                     self.bridgedLog("🔇 Ambient loop stopped (faded)")
@@ -3005,8 +3021,8 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                 }
             } else {
                 // Immediate stop
-                playerC.stop()
-                playerC.reset()
+                playerD.stop()
+                playerD.reset()
                 self.isAmbientLoopPlaying = false
                 self.currentAmbientFile = nil
                 self.bridgedLog("🔇 Ambient loop stopped (immediate)")
