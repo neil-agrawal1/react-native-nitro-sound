@@ -1700,22 +1700,17 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
     // MARK: - Mode Control Methods
 
     public func setManualMode() throws -> Promise<Void> {
-        bridgedLog("🔧 [1/5] setManualMode() called")
         let promise = Promise<Void>()
 
-        bridgedLog("🔧 [2/5] Promise created, dispatching to queue...")
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else {
                 promise.reject(withError: RuntimeError.error(withMessage: "Self is nil"))
                 return
             }
-            self.bridgedLog("🔧 [3/5] Inside async block - starting mode switch")
 
             // Force close any existing segment (might be from auto detection)
-            // Close synchronously WITHOUT callback to avoid promise lifetime issues
             if self.currentSegmentFile != nil {
-                self.bridgedLog("⚠️ Closing existing segment before manual mode (no callback)")
-                self.currentSegmentFile = nil  // Just close the file, don't fire callback
+                self.currentSegmentFile = nil
                 self.segmentStartTime = nil
             }
 
@@ -1723,14 +1718,12 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
             self.currentMode = .manual
             self.currentSegmentIsManual = true
             self.silenceFrameCount = 0
-            self.manualSilenceFrameCount = 0  // Reset manual silence counter
+            self.manualSilenceFrameCount = 0
 
-            self.bridgedLog("🔧 [4/5] Mode flags set, resolving promise...")
+            self.bridgedLog("🔧 Switched to manual mode")
             promise.resolve(withResult: ())
-            self.bridgedLog("🔧 [5/5] setManualMode() completed successfully")
         }
 
-        bridgedLog("🔧 Returning promise from setManualMode()")
         return promise
     }
 
