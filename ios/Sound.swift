@@ -522,6 +522,15 @@ import MediaPlayer
         return .none
     }
 
+    private func getNodeName(for node: AVAudioPlayerNode?) -> String {
+        guard let node = node else { return "NONE" }
+        if node === audioPlayerNodeA { return "A" }
+        if node === audioPlayerNodeB { return "B" }
+        if node === audioPlayerNodeC { return "C" }
+        if node === audioPlayerNodeD { return "D (Ambient)" }
+        return "UNKNOWN"
+    }
+
     private func handlePlaybackCompletion() {
         if let audioFile = self.currentAudioFile {
             let durationSeconds = Double(audioFile.length) / audioFile.fileFormat.sampleRate
@@ -2006,6 +2015,7 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                     self.startPlayTimer()
 
                     playerNode.play()
+                    self.bridgedLog("🎵 PLAYING on Node \(self.getNodeName(for: playerNode)): \(url.lastPathComponent)")
 
                     // Update Now Playing with track info
                     let filename = url.lastPathComponent
@@ -2156,6 +2166,8 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
 
     public func stopPlayer() throws -> Promise<String> {
         let promise = Promise<String>()
+
+        self.bridgedLog("🛑 STOPPING Node \(self.getNodeName(for: self.currentPlayerNode)) (stopPlayer called)")
 
         // Cancel loop crossfade timer
         self.loopCrossfadeTimer?.cancel()
@@ -2791,8 +2803,6 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                 let fadeDuration = duration ?? 3.0
                 let finalVolume = Float(targetVolume ?? 1.0)
 
-                self.bridgedLog("🎵 Crossfading to next track")
-
                 // Ensure audio engine is initialized for crossfading
                 try self.initializeAudioEngine()
 
@@ -2867,6 +2877,9 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                 }
 
                 newNode.play()
+                let currentNodeName = self.getNodeName(for: self.currentPlayerNode)
+                let newNodeName = self.getNodeName(for: newNode)
+                self.bridgedLog("🎵 CROSSFADE: Node \(currentNodeName) → Node \(newNodeName): \(url.lastPathComponent)")
 
                 // DON'T schedule loop timer here - defer until after crossfade completes
                 // This prevents race conditions between main and loop crossfades
@@ -3003,7 +3016,7 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                 playerD.play()
                 self.isAmbientLoopPlaying = true
 
-                self.bridgedLog("🎵 Ambient loop started at \(Int(volume * 100))% volume")
+                self.bridgedLog("🎵 AMBIENT on Node D: \(url.lastPathComponent) at \(Int(volume * 100))% volume")
                 promise.resolve(withResult: ())
 
             } catch {
@@ -3035,6 +3048,7 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
             }
 
             let duration = fadeDuration ?? 2.0
+            self.bridgedLog("🔇 STOPPING Ambient (Node D) - fade: \(duration)s")
 
             if duration > 0 {
                 // Fade out
@@ -3043,7 +3057,7 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                     playerD.reset()
                     self.isAmbientLoopPlaying = false
                     self.currentAmbientFile = nil
-                    self.bridgedLog("🔇 Ambient loop stopped (faded)")
+                    self.bridgedLog("🔇 STOPPED Ambient (Node D) - faded")
                     promise.resolve(withResult: ())
                 }
             } else {
@@ -3052,7 +3066,7 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                 playerD.reset()
                 self.isAmbientLoopPlaying = false
                 self.currentAmbientFile = nil
-                self.bridgedLog("🔇 Ambient loop stopped (immediate)")
+                self.bridgedLog("🔇 STOPPED Ambient (Node D) - immediate")
                 promise.resolve(withResult: ())
             }
         }
