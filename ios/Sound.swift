@@ -487,7 +487,7 @@ import MediaPlayer
         do {
             try engine.start()
             audioEngineInitialized = true
-            bridgedLog("✅ Audio engine ready (playAndRecord, \(Int(audioSession.sampleRate))Hz)")
+            bridgedLog("🟩🟩🟩  🎙️ AUDIO ENGINE: PLAY+RECORD MODE 🎙️  🟩🟩🟩")
         } catch {
             let nsError = error as NSError
             bridgedLog("❌ Engine start failed: \(error.localizedDescription) (code: \(nsError.code))")
@@ -1624,7 +1624,7 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                 // NOTE: Do NOT access inputNode with .playback category
                 try engine.start()
                 self.audioEngineInitialized = true
-                self.bridgedLog("✅ Audio engine ready (playback-only, \(Int(audioSession.sampleRate))Hz)")
+                self.bridgedLog("🟦🟦🟦  🔊 AUDIO ENGINE: PLAYBACK-ONLY MODE 🔊  🟦🟦🟦")
 
                 promise.resolve(withResult: ())
             } catch {
