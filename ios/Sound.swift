@@ -1806,16 +1806,13 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
     }
 
     public func setIdleMode() throws -> Promise<Void> {
-        bridgedLog("🔧 [1/5] setIdleMode() called")
         let promise = Promise<Void>()
 
-        bridgedLog("🔧 [2/5] Promise created, dispatching to queue...")
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else {
                 promise.reject(withError: RuntimeError.error(withMessage: "Self is nil"))
                 return
             }
-            self.bridgedLog("🔧 [3/5] Inside async block - starting mode switch")
 
             // End any current segment before switching to idle
             if self.currentSegmentFile != nil {
@@ -1826,26 +1823,20 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
             // Switch to idle mode (keeps tap active for quick resume)
             self.currentMode = .idle
 
-            self.bridgedLog("🔧 [4/5] Mode flags set, resolving promise...")
             promise.resolve(withResult: ())
-            self.bridgedLog("🔧 [5/5] setIdleMode() completed successfully")
         }
 
-        bridgedLog("🔧 Returning promise from setIdleMode()")
         return promise
     }
 
     public func setVADMode() throws -> Promise<Void> {
-        bridgedLog("🔧 [1/5] setVADMode() called")
         let promise = Promise<Void>()
 
-        bridgedLog("🔧 [2/5] Promise created, dispatching to queue...")
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else {
                 promise.reject(withError: RuntimeError.error(withMessage: "Self is nil"))
                 return
             }
-            self.bridgedLog("🔧 [3/5] Inside async block - starting mode switch")
 
             // End any current segment before mode switch
             if self.currentSegmentFile != nil {
@@ -1861,12 +1852,9 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
             // Reset VAD state to fresh initial state (prevents false positives from stale data)
             self.vadStreamState = VadStreamState.initial()
 
-            self.bridgedLog("🔧 [4/5] Mode flags set, resolving promise...")
             promise.resolve(withResult: ())
-            self.bridgedLog("🔧 [5/5] setVADMode() completed successfully")
         }
 
-        bridgedLog("🔧 Returning promise from setVADMode()")
         return promise
     }
 
