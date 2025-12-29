@@ -28,6 +28,7 @@ import MediaPlayer
     private var audioPlayerNodeD: AVAudioPlayerNode?
     private var isAmbientLoopPlaying: Bool = false
     private var currentAmbientFile: AVAudioFile?
+    private var ambientVolumeBeforePause: Float?  // Store volume for micro-fade on resume
     private var currentLoopingFileURI: String?
 
     // Track which player is active (for future crossfading)
@@ -1654,10 +1655,7 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                 return
             }
 
-            self.bridgedLog("🔚 endPlaybackOnlySession() called - safe teardown (no inputNode access)")
-
             // Step 1: Stop all player nodes
-            self.bridgedLog("   Stopping all player nodes...")
             self.currentPlayerNode?.stop()
             self.audioPlayerNodeA?.stop()
             self.audioPlayerNodeB?.stop()
@@ -1667,23 +1665,18 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
             // Step 2: Stop the audio engine
             // NOTE: We do NOT access engine.inputNode here - that would crash with .playback category
             if let engine = self.audioEngine, engine.isRunning {
-                self.bridgedLog("   Stopping audio engine...")
                 engine.stop()
             }
 
             // Step 3: Deactivate audio session
             let audioSession = AVAudioSession.sharedInstance()
-            self.bridgedLog("   Deactivating audio session...")
             do {
                 try audioSession.setActive(false, options: .notifyOthersOnDeactivation)
-                self.bridgedLog("   ✅ Audio session deactivated")
             } catch {
-                self.bridgedLog("   ⚠️ Failed to deactivate session: \(error.localizedDescription)")
-                // Continue cleanup even if deactivation fails
+                self.bridgedLog("⚠️ Failed to deactivate audio session: \(error.localizedDescription)")
             }
 
             // Step 4: Destroy engine instance
-            self.bridgedLog("   Destroying engine instance...")
             self.audioEngine = nil
             self.audioPlayerNodeA = nil
             self.audioPlayerNodeB = nil
@@ -1699,7 +1692,6 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
             self.shouldLoopPlayback = false
             self.currentPlaybackURI = nil
 
-            self.bridgedLog("✅ endPlaybackOnlySession() completed - playback resources destroyed")
             promise.resolve(withResult: ())
         }
 
@@ -2193,14 +2185,9 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
             playerB.volume = 1.0 // Reset volume
         }
 
-        // Stop ambient loop if playing (uses dedicated Player D)
-        if self.isAmbientLoopPlaying, let playerD = self.audioPlayerNodeD {
-            playerD.stop()
-            playerD.reset()
-            playerD.volume = 1.0
-            self.isAmbientLoopPlaying = false
-            self.currentAmbientFile = nil
-        }
+        // NOTE: Ambient loop (Player D) is NOT stopped here.
+        // JS layer manages ambient lifecycle explicitly via stopAmbientLoop()
+        // to allow proper fade outs. See NitroSoundManager.stopAmbientLoop()
 
         self.currentPlayerNode = nil
 
@@ -2236,11 +2223,19 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
             playerNode.pause()
 
             // Also pause ambient loop if playing (uses dedicated Player D)
+            // Use micro-fade to avoid audio click
             if isAmbientLoopPlaying, let playerD = audioPlayerNodeD {
-                playerD.pause()
+                let currentVolume = playerD.volume
+                self.ambientVolumeBeforePause = currentVolume  // Store for resume
+
+                // Quick fade out (100ms) then pause
+                self.fadeVolume(node: playerD, from: currentVolume, to: 0.0, duration: 0.1) {
+                    playerD.pause()
+                }
             }
 
             self.stopPlayTimer()
+            self.didEmitPlaybackEnd = true  // Prevent native listener from firing while paused
             self.updateNowPlayingPlaybackState(isPlaying: false)
             promise.resolve(withResult: "Player paused")
         } else {
@@ -2257,8 +2252,14 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
             playerNode.play()
 
             // Also resume ambient loop if it was playing (uses dedicated Player D)
+            // Use micro-fade to avoid audio click
             if isAmbientLoopPlaying, let playerD = audioPlayerNodeD {
+                let targetVolume = self.ambientVolumeBeforePause ?? 0.3  // Default to 0.3 if not stored
+                playerD.volume = 0.0  // Start at 0
                 playerD.play()
+
+                // Quick fade in (100ms)
+                self.fadeVolume(node: playerD, from: 0.0, to: targetVolume, duration: 0.1, completion: nil)
             }
 
             self.updateNowPlayingPlaybackState(isPlaying: true)
@@ -2968,7 +2969,7 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
     }
 
     // MARK: - Ambient Loop Methods
-    public func startAmbientLoop(uri: String, volume: Double) throws -> Promise<Void> {
+    public func startAmbientLoop(uri: String, volume: Double, fadeDuration: Double?) throws -> Promise<Void> {
         let promise = Promise<Void>()
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
@@ -3012,8 +3013,11 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                     playerD.reset()
                 }
 
-                // Set volume
-                playerD.volume = Float(volume)
+                // Determine if we should fade in
+                let shouldFadeIn = fadeDuration != nil && fadeDuration! > 0
+
+                // Set initial volume (0 if fading in, target if not)
+                playerD.volume = shouldFadeIn ? 0.0 : Float(volume)
 
                 // Schedule for looping (pre-schedule 3 iterations)
                 playerD.scheduleFile(audioFile, at: nil, completionHandler: nil)
@@ -3026,7 +3030,16 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                 playerD.play()
                 self.isAmbientLoopPlaying = true
 
-                self.bridgedLog("🎵 AMBIENT on Node D: \(url.lastPathComponent) at \(Int(volume * 100))% volume")
+                // Fade in if requested
+                if shouldFadeIn {
+                    self.bridgedLog("🎵 AMBIENT on Node D: \(url.lastPathComponent) - fading in to \(Int(volume * 100))% over \(fadeDuration!)s")
+                    self.fadeVolume(node: playerD, from: 0.0, to: Float(volume), duration: fadeDuration!) {
+                        // Fade complete
+                    }
+                } else {
+                    self.bridgedLog("🎵 AMBIENT on Node D: \(url.lastPathComponent) at \(Int(volume * 100))% volume (instant)")
+                }
+
                 promise.resolve(withResult: ())
 
             } catch {
@@ -3057,7 +3070,7 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                 return
             }
 
-            let duration = fadeDuration ?? 2.0
+            let duration = fadeDuration ?? 5.0
             self.bridgedLog("🔇 STOPPING Ambient (Node D) - fade: \(duration)s")
 
             if duration > 0 {

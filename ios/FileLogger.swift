@@ -51,7 +51,9 @@ class FileLogger {
 
             // Create log file with user identifier and timestamp
             let formatter = DateFormatter()
-            formatter.dateFormat = "yyyy-MM-dd_HH-mm-ss"
+            formatter.dateFormat = "MMMd_h-mma"
+            formatter.amSymbol = "am"
+            formatter.pmSymbol = "pm"
             let timestamp = formatter.string(from: Date())
 
             // Sanitize user identifier for filename (remove special chars)
@@ -76,8 +78,14 @@ class FileLogger {
             // Clean old logs (keep last 7 days)
             self.cleanOldLogs()
 
-            // Write session start marker
-            self.writeToFile("========== SESSION START: \(Date()) ==========\n")
+            // Write session start marker with timezone info
+            let timezone = TimeZone.current
+            let utcOffset = timezone.secondsFromGMT() / 3600
+            let timezoneInfo = "\(timezone.identifier) (UTC\(utcOffset >= 0 ? "+" : "")\(utcOffset))"
+            self.writeToFile("========== SESSION START ==========\n")
+            self.writeToFile("Time: \(Date())\n")
+            self.writeToFile("Timezone: \(timezoneInfo)\n")
+            self.writeToFile("===================================\n")
         }
     }
 

@@ -45,7 +45,7 @@ public protocol HybridSoundSpec_protocol: HybridObject {
   func restartEngine() throws -> Promise<Void>
   func crossfadeTo(uri: String, duration: Double?, targetVolume: Double?) throws -> Promise<String>
   func fadeVolumeTo(targetVolume: Double, duration: Double) throws -> Promise<Void>
-  func startAmbientLoop(uri: String, volume: Double) throws -> Promise<Void>
+  func startAmbientLoop(uri: String, volume: Double, fadeDuration: Double?) throws -> Promise<Void>
   func stopAmbientLoop(fadeDuration: Double?) throws -> Promise<Void>
   func setSubscriptionDuration(sec: Double) throws -> Void
   func addRecordBackListener(callback: @escaping (_ recordingMeta: RecordBackType) -> Void) throws -> Void

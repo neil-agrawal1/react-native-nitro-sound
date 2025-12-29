@@ -191,7 +191,7 @@ export interface Sound
   fadeVolumeTo(targetVolume: number, duration: number): Promise<void>;
 
   // Ambient loop methods
-  startAmbientLoop(uri: string, volume: number): Promise<void>;
+  startAmbientLoop(uri: string, volume: number, fadeDuration?: number): Promise<void>;
   stopAmbientLoop(fadeDuration?: number): Promise<void>;
 
   // Subscription

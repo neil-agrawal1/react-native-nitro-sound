@@ -166,7 +166,7 @@ abstract class HybridSoundSpec: HybridObject() {
   
   @DoNotStrip
   @Keep
-  abstract fun startAmbientLoop(uri: String, volume: Double): Promise<Unit>
+  abstract fun startAmbientLoop(uri: String, volume: Double, fadeDuration: Double?): Promise<Unit>
   
   @DoNotStrip
   @Keep

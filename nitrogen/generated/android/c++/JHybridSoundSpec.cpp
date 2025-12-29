@@ -550,9 +550,9 @@ namespace margelo::nitro::sound {
       return __promise;
     }();
   }
-  std::shared_ptr<Promise<void>> JHybridSoundSpec::startAmbientLoop(const std::string& uri, double volume) {
-    static const auto method = javaClassStatic()->getMethod<jni::local_ref<JPromise::javaobject>(jni::alias_ref<jni::JString> /* uri */, double /* volume */)>("startAmbientLoop");
-    auto __result = method(_javaPart, jni::make_jstring(uri), volume);
+  std::shared_ptr<Promise<void>> JHybridSoundSpec::startAmbientLoop(const std::string& uri, double volume, std::optional<double> fadeDuration) {
+    static const auto method = javaClassStatic()->getMethod<jni::local_ref<JPromise::javaobject>(jni::alias_ref<jni::JString> /* uri */, double /* volume */, jni::alias_ref<jni::JDouble> /* fadeDuration */)>("startAmbientLoop");
+    auto __result = method(_javaPart, jni::make_jstring(uri), volume, fadeDuration.has_value() ? jni::JDouble::valueOf(fadeDuration.value()) : nullptr);
     return [&]() {
       auto __promise = Promise<void>::create();
       __result->cthis()->addOnResolvedListener([=](const jni::alias_ref<jni::JObject>& /* unit */) {
