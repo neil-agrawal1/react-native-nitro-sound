@@ -78,6 +78,10 @@ abstract class HybridSoundSpec: HybridObject() {
   
   @DoNotStrip
   @Keep
+  abstract fun isSegmentRecording(): Promise<Boolean>
+  
+  @DoNotStrip
+  @Keep
   abstract fun startManualSegment(silenceTimeoutSeconds: Double?): Promise<Unit>
   
   @DoNotStrip
@@ -313,6 +317,10 @@ abstract class HybridSoundSpec: HybridObject() {
   @DoNotStrip
   @Keep
   abstract fun clearDebugLogs(): Promise<Unit>
+  
+  @DoNotStrip
+  @Keep
+  abstract fun setDebugLogUserIdentifier(identifier: String): Unit
   
   @DoNotStrip
   @Keep

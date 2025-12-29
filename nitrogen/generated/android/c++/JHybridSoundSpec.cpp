@@ -200,6 +200,22 @@ namespace margelo::nitro::sound {
       return __promise;
     }();
   }
+  std::shared_ptr<Promise<bool>> JHybridSoundSpec::isSegmentRecording() {
+    static const auto method = javaClassStatic()->getMethod<jni::local_ref<JPromise::javaobject>()>("isSegmentRecording");
+    auto __result = method(_javaPart);
+    return [&]() {
+      auto __promise = Promise<bool>::create();
+      __result->cthis()->addOnResolvedListener([=](const jni::alias_ref<jni::JObject>& __boxedResult) {
+        auto __result = jni::static_ref_cast<jni::JBoolean>(__boxedResult);
+        __promise->resolve(static_cast<bool>(__result->value()));
+      });
+      __result->cthis()->addOnRejectedListener([=](const jni::alias_ref<jni::JThrowable>& __throwable) {
+        jni::JniException __jniError(__throwable);
+        __promise->reject(std::make_exception_ptr(__jniError));
+      });
+      return __promise;
+    }();
+  }
   std::shared_ptr<Promise<void>> JHybridSoundSpec::startManualSegment(std::optional<double> silenceTimeoutSeconds) {
     static const auto method = javaClassStatic()->getMethod<jni::local_ref<JPromise::javaobject>(jni::alias_ref<jni::JDouble> /* silenceTimeoutSeconds */)>("startManualSegment");
     auto __result = method(_javaPart, silenceTimeoutSeconds.has_value() ? jni::JDouble::valueOf(silenceTimeoutSeconds.value()) : nullptr);
@@ -693,6 +709,10 @@ namespace margelo::nitro::sound {
       });
       return __promise;
     }();
+  }
+  void JHybridSoundSpec::setDebugLogUserIdentifier(const std::string& identifier) {
+    static const auto method = javaClassStatic()->getMethod<void(jni::alias_ref<jni::JString> /* identifier */)>("setDebugLogUserIdentifier");
+    method(_javaPart, jni::make_jstring(identifier));
   }
   std::string JHybridSoundSpec::mmss(double secs) {
     static const auto method = javaClassStatic()->getMethod<jni::local_ref<jni::JString>(double /* secs */)>("mmss");

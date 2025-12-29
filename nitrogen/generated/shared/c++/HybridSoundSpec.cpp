@@ -23,6 +23,7 @@ namespace margelo::nitro::sound {
       prototype.registerHybridMethod("setManualMode", &HybridSoundSpec::setManualMode);
       prototype.registerHybridMethod("setIdleMode", &HybridSoundSpec::setIdleMode);
       prototype.registerHybridMethod("getCurrentMode", &HybridSoundSpec::getCurrentMode);
+      prototype.registerHybridMethod("isSegmentRecording", &HybridSoundSpec::isSegmentRecording);
       prototype.registerHybridMethod("startManualSegment", &HybridSoundSpec::startManualSegment);
       prototype.registerHybridMethod("stopManualSegment", &HybridSoundSpec::stopManualSegment);
       prototype.registerHybridMethod("setVADThreshold", &HybridSoundSpec::setVADThreshold);
@@ -70,6 +71,7 @@ namespace margelo::nitro::sound {
       prototype.registerHybridMethod("getAllDebugLogPaths", &HybridSoundSpec::getAllDebugLogPaths);
       prototype.registerHybridMethod("readDebugLog", &HybridSoundSpec::readDebugLog);
       prototype.registerHybridMethod("clearDebugLogs", &HybridSoundSpec::clearDebugLogs);
+      prototype.registerHybridMethod("setDebugLogUserIdentifier", &HybridSoundSpec::setDebugLogUserIdentifier);
       prototype.registerHybridMethod("mmss", &HybridSoundSpec::mmss);
       prototype.registerHybridMethod("mmssss", &HybridSoundSpec::mmssss);
       prototype.registerHybridMethod("transcribeAudioFile", &HybridSoundSpec::transcribeAudioFile);

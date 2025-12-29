@@ -111,6 +111,20 @@ export interface Sound
   setIdleMode(): Promise<void>;
   getCurrentMode(): Promise<RecordingMode>;
 
+  /**
+   * Check if a recording segment is actively being recorded.
+   * This is the SOURCE OF TRUTH for recording state - checks if:
+   * 1. A segment file is open (currentSegmentFile != nil)
+   * 2. We're in a recording mode (manual or VAD, not idle)
+   * 3. The audio engine is running with an active input tap
+   *
+   * Use this for UI indicators that need to show actual recording status.
+   * Unlike JS-side segmentActive which can become stale, this queries native directly.
+   *
+   * @returns true if actively recording a segment, false otherwise
+   */
+  isSegmentRecording(): Promise<boolean>;
+
   // Manual segment control (separate from mode setting)
   startManualSegment(silenceTimeoutSeconds?: number): Promise<void>;
   stopManualSegment(): Promise<void>;
@@ -229,6 +243,7 @@ export interface Sound
   getAllDebugLogPaths(): string[];
   readDebugLog(path?: string): string;
   clearDebugLogs(): Promise<void>;
+  setDebugLogUserIdentifier(identifier: string): void;
 
   // Utility methods
   mmss(secs: number): string;

@@ -145,6 +145,14 @@ namespace margelo::nitro::sound {
       auto __value = std::move(__result.value());
       return __value;
     }
+    inline std::shared_ptr<Promise<bool>> isSegmentRecording() override {
+      auto __result = _swiftPart.isSegmentRecording();
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+      auto __value = std::move(__result.value());
+      return __value;
+    }
     inline std::shared_ptr<Promise<void>> startManualSegment(std::optional<double> silenceTimeoutSeconds) override {
       auto __result = _swiftPart.startManualSegment(silenceTimeoutSeconds);
       if (__result.hasError()) [[unlikely]] {
@@ -482,6 +490,12 @@ namespace margelo::nitro::sound {
       }
       auto __value = std::move(__result.value());
       return __value;
+    }
+    inline void setDebugLogUserIdentifier(const std::string& identifier) override {
+      auto __result = _swiftPart.setDebugLogUserIdentifier(identifier);
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
     }
     inline std::string mmss(double secs) override {
       auto __result = _swiftPart.mmss(std::forward<decltype(secs)>(secs));

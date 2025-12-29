@@ -10,6 +10,7 @@ class FileLogger {
     private let logQueue = DispatchQueue(label: "com.dust.filelogger", qos: .utility)
     private var logFileHandle: FileHandle?
     private var currentLogFile: URL?
+    private var userIdentifier: String = "anonymous"
 
     private init() {
         setupLogFile()
@@ -17,6 +18,14 @@ class FileLogger {
 
     deinit {
         try? logFileHandle?.close()
+    }
+
+    /// Set the user identifier for log file naming
+    /// This will be used when creating new log files (on next app restart)
+    func setUserIdentifier(_ identifier: String) {
+        logQueue.async { [weak self] in
+            self?.userIdentifier = identifier.isEmpty ? "anonymous" : identifier
+        }
     }
 
     /// Get the logs directory URL
@@ -40,11 +49,18 @@ class FileLogger {
                 try? self.fileManager.createDirectory(at: logsDir, withIntermediateDirectories: true)
             }
 
-            // Create log file with timestamp
+            // Create log file with user identifier and timestamp
             let formatter = DateFormatter()
             formatter.dateFormat = "yyyy-MM-dd_HH-mm-ss"
             let timestamp = formatter.string(from: Date())
-            let filename = "debug_\(timestamp).log"
+
+            // Sanitize user identifier for filename (remove special chars)
+            let safeIdentifier = self.userIdentifier.replacingOccurrences(
+                of: "[^a-zA-Z0-9]",
+                with: "",
+                options: .regularExpression
+            )
+            let filename = "\(safeIdentifier)_debug_\(timestamp).log"
             let fileURL = logsDir.appendingPathComponent(filename)
 
             // Create file if it doesn't exist

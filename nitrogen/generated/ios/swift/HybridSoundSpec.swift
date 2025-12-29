@@ -23,6 +23,7 @@ public protocol HybridSoundSpec_protocol: HybridObject {
   func setManualMode() throws -> Promise<Void>
   func setIdleMode() throws -> Promise<Void>
   func getCurrentMode() throws -> Promise<RecordingMode>
+  func isSegmentRecording() throws -> Promise<Bool>
   func startManualSegment(silenceTimeoutSeconds: Double?) throws -> Promise<Void>
   func stopManualSegment() throws -> Promise<Void>
   func setVADThreshold(threshold: Double) throws -> Promise<Void>
@@ -70,6 +71,7 @@ public protocol HybridSoundSpec_protocol: HybridObject {
   func getAllDebugLogPaths() throws -> [String]
   func readDebugLog(path: String?) throws -> String
   func clearDebugLogs() throws -> Promise<Void>
+  func setDebugLogUserIdentifier(identifier: String) throws -> Void
   func mmss(secs: Double) throws -> String
   func mmssss(milisecs: Double) throws -> String
   func transcribeAudioFile(filePath: String) throws -> Promise<String>

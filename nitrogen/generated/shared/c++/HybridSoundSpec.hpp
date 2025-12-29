@@ -73,6 +73,7 @@ namespace margelo::nitro::sound {
       virtual std::shared_ptr<Promise<void>> setManualMode() = 0;
       virtual std::shared_ptr<Promise<void>> setIdleMode() = 0;
       virtual std::shared_ptr<Promise<RecordingMode>> getCurrentMode() = 0;
+      virtual std::shared_ptr<Promise<bool>> isSegmentRecording() = 0;
       virtual std::shared_ptr<Promise<void>> startManualSegment(std::optional<double> silenceTimeoutSeconds) = 0;
       virtual std::shared_ptr<Promise<void>> stopManualSegment() = 0;
       virtual std::shared_ptr<Promise<void>> setVADThreshold(double threshold) = 0;
@@ -120,6 +121,7 @@ namespace margelo::nitro::sound {
       virtual std::vector<std::string> getAllDebugLogPaths() = 0;
       virtual std::string readDebugLog(const std::optional<std::string>& path) = 0;
       virtual std::shared_ptr<Promise<void>> clearDebugLogs() = 0;
+      virtual void setDebugLogUserIdentifier(const std::string& identifier) = 0;
       virtual std::string mmss(double secs) = 0;
       virtual std::string mmssss(double milisecs) = 0;
       virtual std::shared_ptr<Promise<std::string>> transcribeAudioFile(const std::string& filePath) = 0;

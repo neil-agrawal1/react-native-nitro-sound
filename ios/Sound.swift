@@ -1877,6 +1877,24 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
         return promise
     }
 
+    public func isSegmentRecording() throws -> Promise<Bool> {
+        let promise = Promise<Bool>()
+
+        // Check if we're actively recording a segment
+        // This is the source of truth for recording state:
+        // 1. We have an open segment file (currentSegmentFile != nil)
+        // 2. We're in a recording mode (manual or autoVAD, not idle)
+        // 3. The audio engine is running (has active input tap)
+        let hasActiveSegment = self.currentSegmentFile != nil
+        let inRecordingMode = self.currentMode != .idle
+        let engineRunning = self.audioEngine?.isRunning ?? false
+
+        let isRecording = hasActiveSegment && inRecordingMode && engineRunning
+
+        promise.resolve(withResult: isRecording)
+        return promise
+    }
+
     public func setVADThreshold(threshold: Double) throws -> Promise<Void> {
         let promise = Promise<Void>()
 
@@ -2677,6 +2695,10 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
         promise.resolve(withResult: ())
 
         return promise
+    }
+
+    public func setDebugLogUserIdentifier(identifier: String) throws {
+        FileLogger.shared.setUserIdentifier(identifier)
     }
 
     // MARK: - Utility Methods
