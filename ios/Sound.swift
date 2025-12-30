@@ -2936,7 +2936,9 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
             self.bridgedLog("🔊 fadeVolumeTo: \(currentVolume) → \(target) over \(duration)s")
 
             self.fadeVolume(node: playerNode, from: currentVolume, to: target, duration: duration) {
-                self.bridgedLog("🔊 fadeVolumeTo: Complete ✓")
+                // BUGFIX: Update playbackVolume to match target for seamless loop iterations
+                self.playbackVolume = target
+                self.bridgedLog("🔊 fadeVolumeTo: Complete ✓ (playbackVolume updated to \(target))")
                 promise.resolve(withResult: ())
             }
         }
