@@ -497,6 +497,12 @@ namespace margelo::nitro::sound {
         std::rethrow_exception(__result.error());
       }
     }
+    inline void writeDebugLogSummary() override {
+      auto __result = _swiftPart.writeDebugLogSummary();
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+    }
     inline std::string mmss(double secs) override {
       auto __result = _swiftPart.mmss(std::forward<decltype(secs)>(secs));
       if (__result.hasError()) [[unlikely]] {

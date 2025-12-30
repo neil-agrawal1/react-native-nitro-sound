@@ -111,6 +111,7 @@ namespace margelo::nitro::sound {
     std::string readDebugLog(const std::optional<std::string>& path) override;
     std::shared_ptr<Promise<void>> clearDebugLogs() override;
     void setDebugLogUserIdentifier(const std::string& identifier) override;
+    void writeDebugLogSummary() override;
     std::string mmss(double secs) override;
     std::string mmssss(double milisecs) override;
     std::shared_ptr<Promise<std::string>> transcribeAudioFile(const std::string& filePath) override;

@@ -72,6 +72,7 @@ namespace margelo::nitro::sound {
       prototype.registerHybridMethod("readDebugLog", &HybridSoundSpec::readDebugLog);
       prototype.registerHybridMethod("clearDebugLogs", &HybridSoundSpec::clearDebugLogs);
       prototype.registerHybridMethod("setDebugLogUserIdentifier", &HybridSoundSpec::setDebugLogUserIdentifier);
+      prototype.registerHybridMethod("writeDebugLogSummary", &HybridSoundSpec::writeDebugLogSummary);
       prototype.registerHybridMethod("mmss", &HybridSoundSpec::mmss);
       prototype.registerHybridMethod("mmssss", &HybridSoundSpec::mmssss);
       prototype.registerHybridMethod("transcribeAudioFile", &HybridSoundSpec::transcribeAudioFile);

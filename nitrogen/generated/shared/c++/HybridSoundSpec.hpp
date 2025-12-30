@@ -122,6 +122,7 @@ namespace margelo::nitro::sound {
       virtual std::string readDebugLog(const std::optional<std::string>& path) = 0;
       virtual std::shared_ptr<Promise<void>> clearDebugLogs() = 0;
       virtual void setDebugLogUserIdentifier(const std::string& identifier) = 0;
+      virtual void writeDebugLogSummary() = 0;
       virtual std::string mmss(double secs) = 0;
       virtual std::string mmssss(double milisecs) = 0;
       virtual std::shared_ptr<Promise<std::string>> transcribeAudioFile(const std::string& filePath) = 0;

@@ -324,6 +324,10 @@ abstract class HybridSoundSpec: HybridObject() {
   
   @DoNotStrip
   @Keep
+  abstract fun writeDebugLogSummary(): Unit
+  
+  @DoNotStrip
+  @Keep
   abstract fun mmss(secs: Double): String
   
   @DoNotStrip

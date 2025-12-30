@@ -714,6 +714,10 @@ namespace margelo::nitro::sound {
     static const auto method = javaClassStatic()->getMethod<void(jni::alias_ref<jni::JString> /* identifier */)>("setDebugLogUserIdentifier");
     method(_javaPart, jni::make_jstring(identifier));
   }
+  void JHybridSoundSpec::writeDebugLogSummary() {
+    static const auto method = javaClassStatic()->getMethod<void()>("writeDebugLogSummary");
+    method(_javaPart);
+  }
   std::string JHybridSoundSpec::mmss(double secs) {
     static const auto method = javaClassStatic()->getMethod<jni::local_ref<jni::JString>(double /* secs */)>("mmss");
     auto __result = method(_javaPart, secs);

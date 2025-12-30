@@ -245,6 +245,13 @@ export interface Sound
   clearDebugLogs(): Promise<void>;
   setDebugLogUserIdentifier(identifier: string): void;
 
+  /**
+   * Write session summary to the debug log file.
+   * Includes error/warning counts and session duration.
+   * Call this before generating bug reports or when app backgrounds.
+   */
+  writeDebugLogSummary(): void;
+
   // Utility methods
   mmss(secs: number): string;
   mmssss(milisecs: number): string;

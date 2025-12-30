@@ -1116,6 +1116,17 @@ open class HybridSoundSpec_cxx {
   }
   
   @inline(__always)
+  public final func writeDebugLogSummary() -> bridge.Result_void_ {
+    do {
+      try self.__implementation.writeDebugLogSummary()
+      return bridge.create_Result_void_()
+    } catch (let __error) {
+      let __exceptionPtr = __error.toCpp()
+      return bridge.create_Result_void_(__exceptionPtr)
+    }
+  }
+  
+  @inline(__always)
   public final func mmss(secs: Double) -> bridge.Result_std__string_ {
     do {
       let __result = try self.__implementation.mmss(secs: secs)

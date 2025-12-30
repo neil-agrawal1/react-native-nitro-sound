@@ -72,6 +72,7 @@ public protocol HybridSoundSpec_protocol: HybridObject {
   func readDebugLog(path: String?) throws -> String
   func clearDebugLogs() throws -> Promise<Void>
   func setDebugLogUserIdentifier(identifier: String) throws -> Void
+  func writeDebugLogSummary() throws -> Void
   func mmss(secs: Double) throws -> String
   func mmssss(milisecs: Double) throws -> String
   func transcribeAudioFile(filePath: String) throws -> Promise<String>

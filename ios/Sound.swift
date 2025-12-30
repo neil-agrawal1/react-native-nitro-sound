@@ -2702,6 +2702,10 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
         FileLogger.shared.setUserIdentifier(identifier)
     }
 
+    public func writeDebugLogSummary() throws {
+        FileLogger.shared.writeSessionSummary()
+    }
+
     // MARK: - Utility Methods
 
     public func mmss(secs: Double) throws -> String {

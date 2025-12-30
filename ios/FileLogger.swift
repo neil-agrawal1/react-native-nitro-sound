@@ -12,11 +12,18 @@ class FileLogger {
     private var currentLogFile: URL?
     private var userIdentifier: String = "anonymous"
 
+    // Session statistics for summary
+    private var errorCount: Int = 0
+    private var warningCount: Int = 0
+    private var sessionStartTime: Date = Date()
+
     private init() {
         setupLogFile()
     }
 
     deinit {
+        // Write session summary before closing
+        writeSessionSummarySync()
         try? logFileHandle?.close()
     }
 
@@ -78,6 +85,11 @@ class FileLogger {
             // Clean old logs (keep last 7 days)
             self.cleanOldLogs()
 
+            // Reset session statistics
+            self.errorCount = 0
+            self.warningCount = 0
+            self.sessionStartTime = Date()
+
             // Write session start marker with timezone info
             let timezone = TimeZone.current
             let utcOffset = timezone.secondsFromGMT() / 3600
@@ -110,6 +122,13 @@ class FileLogger {
     private func writeToFile(_ message: String) {
         guard let handle = logFileHandle else {
             return
+        }
+
+        // Track error/warning counts for session summary
+        if message.contains("[ERROR]") {
+            errorCount += 1
+        } else if message.contains("[WARN]") {
+            warningCount += 1
         }
 
         let formatter = DateFormatter()
@@ -205,6 +224,76 @@ class FileLogger {
                creationDate < sevenDaysAgo {
                 try? fileManager.removeItem(at: file)
             }
+        }
+    }
+
+    // MARK: - Session Summary
+
+    /// Write session summary (async, thread-safe)
+    /// Call this when the app is backgrounding or before generating a bug report
+    func writeSessionSummary() {
+        logQueue.async { [weak self] in
+            self?.writeSessionSummaryInternal()
+        }
+    }
+
+    /// Write session summary synchronously (for deinit)
+    private func writeSessionSummarySync() {
+        logQueue.sync { [weak self] in
+            self?.writeSessionSummaryInternal()
+        }
+    }
+
+    /// Internal implementation of session summary writing
+    private func writeSessionSummaryInternal() {
+        guard logFileHandle != nil else { return }
+
+        let sessionDuration = Date().timeIntervalSince(sessionStartTime)
+        let hours = Int(sessionDuration) / 3600
+        let minutes = (Int(sessionDuration) % 3600) / 60
+        let seconds = Int(sessionDuration) % 60
+
+        let durationString: String
+        if hours > 0 {
+            durationString = "\(hours)h \(minutes)m \(seconds)s"
+        } else if minutes > 0 {
+            durationString = "\(minutes)m \(seconds)s"
+        } else {
+            durationString = "\(seconds)s"
+        }
+
+        // Create a visually distinct summary block
+        var summary = "\n"
+        summary += "=========== SESSION SUMMARY ===========\n"
+        summary += "Duration: \(durationString)\n"
+
+        // Errors and warnings with visual indicators
+        if errorCount > 0 {
+            summary += "🔴 ERRORS: \(errorCount)\n"
+        } else {
+            summary += "✅ ERRORS: 0\n"
+        }
+
+        if warningCount > 0 {
+            summary += "🟡 WARNINGS: \(warningCount)\n"
+        } else {
+            summary += "✅ WARNINGS: 0\n"
+        }
+
+        // Overall status
+        if errorCount == 0 && warningCount == 0 {
+            summary += "Status: Clean session - no issues detected\n"
+        } else if errorCount > 0 {
+            summary += "Status: ⚠️ Session had \(errorCount) error(s) - review above\n"
+        } else {
+            summary += "Status: Session had \(warningCount) warning(s)\n"
+        }
+
+        summary += "=======================================\n"
+
+        // Write directly without timestamp prefix (summary is self-contained)
+        if let data = summary.data(using: .utf8) {
+            try? logFileHandle?.write(contentsOf: data)
         }
     }
 }
