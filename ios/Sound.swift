@@ -339,8 +339,7 @@ import MediaPlayer
             throw RuntimeError.error(withMessage: "No engine to restart")
         }
 
-        bridgedLog("🔧 Starting engine restart process...")
-        bridgedLog("   Engine state: initialized=\(audioEngineInitialized), running=\(engine.isRunning)")
+        bridgedLog("🔧 Restarting audio engine...")
 
         // IMPORTANT: AVAudioSession and AVAudioEngine are separate systems:
         // - AVAudioSession: iOS system-level singleton that controls audio permissions/routing
@@ -351,46 +350,30 @@ import MediaPlayer
         // then restart the ENGINE. Trying to start the engine without an active session
         // can cause format errors (2003329396) because hardware isn't accessible.
         let audioSession = AVAudioSession.sharedInstance()
-        
-        // Log session state before reactivation
-        let sessionCategory = audioSession.category.rawValue
-        let currentRoute = audioSession.currentRoute
-        bridgedLog("   📡 Session state before reactivation: category=\(sessionCategory)")
-        bridgedLog("   🔌 Current route: [\(currentRoute.outputs.map { $0.portName }.joined(separator: ", "))]")
-        
+
         // Step 1: Reactivate the audio session (tell iOS we want audio access again)
         // NOTE: In background with locked device, this might fail if iOS has suspended the app.
         // That's OK - the next audio operation (alarm, silent loop) will fully reinitialize.
-        bridgedLog("   🔧 Step 1: Reactivating audio session...")
         do {
             try audioSession.setActive(true, options: [])
-            bridgedLog("   ✅ Audio session reactivated successfully")
         } catch {
             let nsError = error as NSError
-            bridgedLog("   ⚠️ Failed to reactivate audio session: \(error.localizedDescription) (code: \(nsError.code))")
-            bridgedLog("   ⚠️ This may fail in background - continuing anyway")
-            // In background, this might fail - that's OK, next operation will reinitialize
-            // Continue anyway - session might still be active or will be activated by engine.start()
+            bridgedLog("⚠️ Failed to reactivate audio session: \(error.localizedDescription) (code: \(nsError.code)) - continuing anyway")
         }
 
         // Step 2: Restart the audio engine (start audio processing)
         if !engine.isRunning {
-            bridgedLog("   🔧 Step 2: Starting audio engine...")
             do {
                 try engine.start()
-                bridgedLog("   ✅ Audio engine started successfully")
-                bridgedLog("   ✅ Engine restart completed successfully")
+                bridgedLog("✅ Audio engine restarted")
             } catch {
                 // If restart fails with format error (2003329396 = kAudioFormatUnsupportedDataFormatError),
                 // the engine's format configuration is likely stale/invalid after interruption
                 let nsError = error as NSError
                 let errorCode = nsError.code
-                
-                bridgedLog("   ❌ Engine start failed: \(error.localizedDescription) (code: \(errorCode))")
-                
+
                 if errorCode == 2003329396 { // kAudioFormatUnsupportedDataFormatError
-                    bridgedLog("   ⚠️ Format error detected (2003329396) - engine format is stale/invalid")
-                    bridgedLog("   🔧 Destroying engine for full reinitialize...")
+                    bridgedLog("⚠️ Format error (2003329396) - destroying engine for reinit")
                     // Destroy the engine instance so initializeAudioEngine() creates a fresh one
                     // This ensures we get a clean format configuration on next operation
                     audioEngine = nil
@@ -399,17 +382,14 @@ import MediaPlayer
                     audioPlayerNodeC = nil
                     audioPlayerNodeD = nil
                     audioEngineInitialized = false
-                    bridgedLog("   ✅ Engine destroyed - will reinitialize on next operation")
                     // Don't throw - allow graceful degradation, next operation will fully reinitialize
                 } else {
-                    // Re-throw other errors (they might be recoverable)
-                    bridgedLog("   ❌ Engine restart failed with non-format error - rethrowing")
+                    bridgedLog("❌ Engine restart failed: \(error.localizedDescription) (code: \(errorCode))")
                     throw error
                 }
             }
         } else {
-            bridgedLog("   ℹ️ Engine already running - no restart needed")
-            bridgedLog("   ✅ Engine restart check completed")
+            bridgedLog("✅ Audio engine already running")
         }
     }
 
@@ -1482,18 +1462,16 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                 return
             }
 
-            self.bridgedLog("🔚 endEngineSession() called - full teardown")
+            self.bridgedLog("🔚 endEngineSession() - full teardown")
 
             // Step 1: End any active recording segments
             if self.currentSegmentFile != nil {
-                self.bridgedLog("   Ending active recording segment...")
                 if let metadata = self.endCurrentSegmentWithoutCallback() {
                     self.processAndFireSegmentCallback(metadata: metadata, trimSeconds: 0)
                 }
             }
 
             // Step 2: Stop all playback
-            self.bridgedLog("   Stopping all player nodes...")
             self.currentPlayerNode?.stop()
             self.audioPlayerNodeA?.stop()
             self.audioPlayerNodeB?.stop()
@@ -1502,29 +1480,23 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
 
             // Step 3: Remove microphone tap
             if let engine = self.audioEngine {
-                self.bridgedLog("   Removing microphone tap...")
                 engine.inputNode.removeTap(onBus: 0)
             }
 
             // Step 4: Stop the audio engine
             if let engine = self.audioEngine, engine.isRunning {
-                self.bridgedLog("   Stopping audio engine...")
                 engine.stop()
             }
 
             // Step 5: Deactivate audio session (critical for removing mic indicator)
             let audioSession = AVAudioSession.sharedInstance()
-            self.bridgedLog("   Deactivating audio session...")
             do {
                 try audioSession.setActive(false, options: .notifyOthersOnDeactivation)
-                self.bridgedLog("   ✅ Audio session deactivated - mic indicator should disappear")
             } catch {
-                self.bridgedLog("   ⚠️ Failed to deactivate session: \(error.localizedDescription)")
-                // Continue cleanup even if deactivation fails
+                self.bridgedLog("⚠️ Failed to deactivate session: \(error.localizedDescription)")
             }
 
             // Step 6: Destroy engine instance (forces re-initialization on next session)
-            self.bridgedLog("   Destroying engine instance...")
             self.audioEngine = nil
             self.audioPlayerNodeA = nil
             self.audioPlayerNodeB = nil
@@ -1548,7 +1520,7 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
             // Step 9: Reset mode
             self.currentMode = .idle
 
-            self.bridgedLog("✅ endEngineSession() completed - all resources destroyed")
+            self.bridgedLog("✅ endEngineSession() completed")
             promise.resolve(withResult: ())
         }
 
