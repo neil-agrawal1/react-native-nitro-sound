@@ -3083,7 +3083,7 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
         duration: Double,
         completion: (() -> Void)? = nil
     ) {
-        let steps = 30
+        let steps = 60
         let stepDuration = duration / Double(steps)
 
         var currentStep = 0
