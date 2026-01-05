@@ -18,6 +18,7 @@ class FileLogger {
     private var sessionStartTime: Date = Date()
 
     private init() {
+        print("🔵 [FileLogger] init() called")
         setupLogFile()
     }
 
@@ -45,15 +46,32 @@ class FileLogger {
 
     /// Setup log file for current session
     private func setupLogFile() {
+        print("🔵 [FileLogger] setupLogFile() dispatching to queue")
         logQueue.async { [weak self] in
-            guard let self = self,
-                  let logsDir = self.getLogsDirectory() else {
+            print("🔵 [FileLogger] setupLogFile() running on queue")
+            guard let self = self else {
+                print("🔴 [FileLogger] ERROR: self is nil")
                 return
             }
 
+            guard let logsDir = self.getLogsDirectory() else {
+                print("🔴 [FileLogger] ERROR: getLogsDirectory() returned nil")
+                return
+            }
+            print("🔵 [FileLogger] logsDir: \(logsDir.path)")
+
             // Create logs directory if needed
             if !self.fileManager.fileExists(atPath: logsDir.path) {
-                try? self.fileManager.createDirectory(at: logsDir, withIntermediateDirectories: true)
+                print("🔵 [FileLogger] Creating directory...")
+                do {
+                    try self.fileManager.createDirectory(at: logsDir, withIntermediateDirectories: true)
+                    print("🟢 [FileLogger] Directory created successfully")
+                } catch {
+                    print("🔴 [FileLogger] ERROR creating directory: \(error)")
+                    return
+                }
+            } else {
+                print("🔵 [FileLogger] Directory already exists")
             }
 
             // Create log file with user identifier and timestamp
@@ -62,6 +80,7 @@ class FileLogger {
             formatter.amSymbol = "am"
             formatter.pmSymbol = "pm"
             let timestamp = formatter.string(from: Date())
+            print("🔵 [FileLogger] timestamp: '\(timestamp)'")
 
             // Sanitize user identifier for filename (remove special chars)
             let safeIdentifier = self.userIdentifier.replacingOccurrences(
@@ -71,16 +90,33 @@ class FileLogger {
             )
             let filename = "\(safeIdentifier)_debug_\(timestamp).log"
             let fileURL = logsDir.appendingPathComponent(filename)
+            print("🔵 [FileLogger] filename: '\(filename)'")
+            print("🔵 [FileLogger] fileURL: \(fileURL.path)")
 
             // Create file if it doesn't exist
             if !self.fileManager.fileExists(atPath: fileURL.path) {
-                self.fileManager.createFile(atPath: fileURL.path, contents: nil)
+                print("🔵 [FileLogger] Creating file...")
+                let created = self.fileManager.createFile(atPath: fileURL.path, contents: nil)
+                if created {
+                    print("🟢 [FileLogger] File created successfully")
+                } else {
+                    print("🔴 [FileLogger] ERROR: createFile returned false")
+                    return
+                }
+            } else {
+                print("🔵 [FileLogger] File already exists")
             }
 
             // Open file handle for appending
-            self.logFileHandle = try? FileHandle(forWritingTo: fileURL)
-            self.logFileHandle?.seekToEndOfFile()
-            self.currentLogFile = fileURL
+            do {
+                self.logFileHandle = try FileHandle(forWritingTo: fileURL)
+                self.logFileHandle?.seekToEndOfFile()
+                self.currentLogFile = fileURL
+                print("🟢 [FileLogger] File handle opened successfully: \(fileURL.lastPathComponent)")
+            } catch {
+                print("🔴 [FileLogger] ERROR opening file handle: \(error)")
+                return
+            }
 
             // Clean old logs (keep last 7 days)
             self.cleanOldLogs()
@@ -101,10 +137,21 @@ class FileLogger {
         }
     }
 
+    // Debug counter for first few log calls
+    private static var logCallCount = 0
+
     /// Write log message to file
     func log(_ message: String) {
         logQueue.async { [weak self] in
             guard let self = self else { return }
+
+            FileLogger.logCallCount += 1
+            let callNum = FileLogger.logCallCount
+
+            // Only print debug for first 5 calls to avoid spam
+            if callNum <= 5 {
+                print("🔵 [FileLogger] log() call #\(callNum), handle ready: \(self.logFileHandle != nil)")
+            }
 
             // Wait for file handle to be ready (setup runs async on first access)
             // This prevents early logs from being lost during initialization
@@ -114,13 +161,23 @@ class FileLogger {
                 attempts += 1
             }
 
+            if self.logFileHandle == nil {
+                print("🔴 [FileLogger] log() call #\(callNum) FAILED: handle still nil after \(attempts) attempts")
+                return
+            }
+
             self.writeToFile(message)
+
+            if callNum <= 5 {
+                print("🟢 [FileLogger] log() call #\(callNum) wrote to file")
+            }
         }
     }
 
     /// Internal write method (must be called on logQueue)
     private func writeToFile(_ message: String) {
         guard let handle = logFileHandle else {
+            print("🔴 [FileLogger] writeToFile() FAILED: handle is nil")
             return
         }
 
