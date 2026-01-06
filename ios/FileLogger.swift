@@ -29,10 +29,42 @@ class FileLogger {
     }
 
     /// Set the user identifier for log file naming
-    /// This will be used when creating new log files (on next app restart)
+    /// If the current log file is "anonymous", it will be renamed to use the new identifier
     func setUserIdentifier(_ identifier: String) {
         logQueue.async { [weak self] in
-            self?.userIdentifier = identifier.isEmpty ? "anonymous" : identifier
+            guard let self = self else { return }
+            let newIdentifier = identifier.isEmpty ? "anonymous" : identifier
+
+            // If we have a current log file with "anonymous" and new identifier is different, rename it
+            if let currentFile = self.currentLogFile,
+               self.userIdentifier == "anonymous",
+               newIdentifier != "anonymous" {
+                // Sanitize the new identifier for filename
+                let safeIdentifier = newIdentifier.replacingOccurrences(
+                    of: "[^a-zA-Z0-9]",
+                    with: "",
+                    options: .regularExpression
+                )
+
+                // Build new filename with the user identifier
+                let oldFilename = currentFile.lastPathComponent
+                let newFilename = oldFilename.replacingOccurrences(of: "anonymous_", with: "\(safeIdentifier)_")
+                let newURL = currentFile.deletingLastPathComponent().appendingPathComponent(newFilename)
+
+                // Close handle, rename file, reopen handle
+                do {
+                    try self.logFileHandle?.close()
+                    try self.fileManager.moveItem(at: currentFile, to: newURL)
+                    self.currentLogFile = newURL
+                    self.logFileHandle = try FileHandle(forWritingTo: newURL)
+                    self.logFileHandle?.seekToEndOfFile()
+                    print("🟢 [FileLogger] Renamed log file to: \(newFilename)")
+                } catch {
+                    print("🔴 [FileLogger] Failed to rename log file: \(error)")
+                }
+            }
+
+            self.userIdentifier = newIdentifier
         }
     }
 
