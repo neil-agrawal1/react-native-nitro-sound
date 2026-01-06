@@ -567,8 +567,8 @@ import MediaPlayer
             do {
                 try self.initializeAudioEngine()
 
-                // Setup Now Playing controls
-                self.setupRemoteCommandCenter()
+                // Remote command center disabled - no lock screen widget needed
+                // self.setupRemoteCommandCenter()
 
                 let audioSession = AVAudioSession.sharedInstance()
                 let currentPermission = audioSession.recordPermission

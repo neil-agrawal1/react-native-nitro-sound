@@ -76,6 +76,7 @@ class FileLogger {
 
             // Create log file with user identifier and timestamp
             let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "en_US_POSIX")  // Force 12-hour format regardless of user's locale
             formatter.dateFormat = "MMMd_h-mma"
             formatter.amSymbol = "am"
             formatter.pmSymbol = "pm"
