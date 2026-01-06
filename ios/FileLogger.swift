@@ -46,21 +46,26 @@ class FileLogger {
                     options: .regularExpression
                 )
 
-                // Build new filename with the user identifier
                 let oldFilename = currentFile.lastPathComponent
                 let newFilename = oldFilename.replacingOccurrences(of: "anonymous_", with: "\(safeIdentifier)_")
                 let newURL = currentFile.deletingLastPathComponent().appendingPathComponent(newFilename)
 
-                // Close handle, rename file, reopen handle
+                // Close handle first
+                try? self.logFileHandle?.close()
+                self.logFileHandle = nil
+
+                // Try to rename
                 do {
-                    try self.logFileHandle?.close()
                     try self.fileManager.moveItem(at: currentFile, to: newURL)
                     self.currentLogFile = newURL
                     self.logFileHandle = try FileHandle(forWritingTo: newURL)
                     self.logFileHandle?.seekToEndOfFile()
                     print("🟢 [FileLogger] Renamed log file to: \(newFilename)")
                 } catch {
-                    print("🔴 [FileLogger] Failed to rename log file: \(error)")
+                    // FALLBACK: Reopen original file so logging continues
+                    print("🔴 [FileLogger] Failed to rename, reopening original: \(error)")
+                    self.logFileHandle = try? FileHandle(forWritingTo: currentFile)
+                    self.logFileHandle?.seekToEndOfFile()
                 }
             }
 
