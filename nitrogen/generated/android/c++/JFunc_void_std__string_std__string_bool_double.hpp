@@ -12,7 +12,6 @@
 
 #include <string>
 #include <functional>
-#include <NitroModules/JNICallable.hpp>
 
 namespace margelo::nitro::sound {
 
@@ -39,7 +38,7 @@ namespace margelo::nitro::sound {
   /**
    * An implementation of Func_void_std__string_std__string_bool_double that is backed by a C++ implementation (using `std::function<...>`)
    */
-  class JFunc_void_std__string_std__string_bool_double_cxx final: public jni::HybridClass<JFunc_void_std__string_std__string_bool_double_cxx, JFunc_void_std__string_std__string_bool_double> {
+  struct JFunc_void_std__string_std__string_bool_double_cxx final: public jni::HybridClass<JFunc_void_std__string_std__string_bool_double_cxx, JFunc_void_std__string_std__string_bool_double> {
   public:
     static jni::local_ref<JFunc_void_std__string_std__string_bool_double::javaobject> fromCpp(const std::function<void(const std::string& /* filename */, const std::string& /* filePath */, bool /* isManual */, double /* duration */)>& func) {
       return JFunc_void_std__string_std__string_bool_double_cxx::newObjectCxxArgs(func);

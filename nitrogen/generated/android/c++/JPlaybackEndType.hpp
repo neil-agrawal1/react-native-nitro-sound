@@ -47,11 +47,7 @@ namespace margelo::nitro::sound {
      */
     [[maybe_unused]]
     static jni::local_ref<JPlaybackEndType::javaobject> fromCpp(const PlaybackEndType& value) {
-      using JSignature = JPlaybackEndType(double, double);
-      static const auto clazz = javaClassStatic();
-      static const auto create = clazz->getStaticMethod<JSignature>("fromCpp");
-      return create(
-        clazz,
+      return newInstance(
         value.duration,
         value.currentPosition
       );

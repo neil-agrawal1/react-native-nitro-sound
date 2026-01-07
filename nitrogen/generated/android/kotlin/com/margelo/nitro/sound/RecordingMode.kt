@@ -19,6 +19,4 @@ enum class RecordingMode(@DoNotStrip @Keep val value: Int) {
   IDLE(0),
   MANUAL(1),
   VAD(2);
-
-  companion object
 }

@@ -9,6 +9,7 @@ package com.margelo.nitro.sound
 
 import androidx.annotation.Keep
 import com.facebook.proguard.annotations.DoNotStrip
+import com.margelo.nitro.core.*
 
 
 /**
@@ -16,29 +17,19 @@ import com.facebook.proguard.annotations.DoNotStrip
  */
 @DoNotStrip
 @Keep
-data class PlayBackType(
+data class PlayBackType
   @DoNotStrip
   @Keep
-  val isMuted: Boolean?,
-  @DoNotStrip
-  @Keep
-  val duration: Double,
-  @DoNotStrip
-  @Keep
-  val currentPosition: Double
-) {
-  /* primary constructor */
-
-  companion object {
-    /**
-     * Constructor called from C++
-     */
+  constructor(
     @DoNotStrip
     @Keep
-    @Suppress("unused")
-    @JvmStatic
-    private fun fromCpp(isMuted: Boolean?, duration: Double, currentPosition: Double): PlayBackType {
-      return PlayBackType(isMuted, duration, currentPosition)
-    }
-  }
+    val isMuted: Boolean?,
+    @DoNotStrip
+    @Keep
+    val duration: Double,
+    @DoNotStrip
+    @Keep
+    val currentPosition: Double
+  ) {
+  /* main constructor */
 }

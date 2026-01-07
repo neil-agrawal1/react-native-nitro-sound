@@ -10430,7 +10430,7 @@ react-native-nitro-modules@^0.29.6, react-native-nitro-modules@0.29.6:
   resolved "https://registry.npmjs.org/react-native-nitro-modules/-/react-native-nitro-modules-0.29.6.tgz"
   integrity sha512-Zm7x7DPx2bYc/eMfJ4lg2CCyXRCEm6as1ZyVU/2vCqMskiQxQquL3INqjne+tEJw+/h+mrnKrb7z7PiUitzEQw==
 
-"react-native-nitro-sound-example@file:/Users/neilagrawal/Documents/dust/hypnos-native/Dust/libs/react-native-nitro-sound/example":
+"react-native-nitro-sound-example@file:/Users/neilagrawal/Documents/dust/hypnos-native/mobile/libs/react-native-nitro-sound/example":
   version "0.0.1"
   resolved "file:example"
   dependencies:

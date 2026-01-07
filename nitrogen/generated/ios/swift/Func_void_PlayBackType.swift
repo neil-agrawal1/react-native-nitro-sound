@@ -5,8 +5,8 @@
 /// Copyright © 2026 Marc Rousavy @ Margelo
 ///
 
-import Foundation
 import NitroModules
+
 
 /**
  * Wraps a Swift `(_ playbackMeta: PlayBackType) -> Void` as a class.

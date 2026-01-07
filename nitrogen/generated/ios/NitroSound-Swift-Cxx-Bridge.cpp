@@ -10,7 +10,6 @@
 // Include C++ implementation defined types
 #include "HybridSoundSpecSwift.hpp"
 #include "NitroSound-Swift-Cxx-Umbrella.hpp"
-#include <NitroModules/NitroDefines.hpp>
 
 namespace margelo::nitro::sound::bridge::swift {
 
@@ -99,7 +98,7 @@ namespace margelo::nitro::sound::bridge::swift {
     NitroSound::HybridSoundSpec_cxx swiftPart = NitroSound::HybridSoundSpec_cxx::fromUnsafe(swiftUnsafePointer);
     return std::make_shared<margelo::nitro::sound::HybridSoundSpecSwift>(swiftPart);
   }
-  void* _Nonnull get_std__shared_ptr_HybridSoundSpec_(std__shared_ptr_HybridSoundSpec_ cppType) {
+  void* _Nonnull get_std__shared_ptr_HybridSoundSpec_(std__shared_ptr_HybridSoundSpec_ cppType) noexcept {
     std::shared_ptr<margelo::nitro::sound::HybridSoundSpecSwift> swiftWrapper = std::dynamic_pointer_cast<margelo::nitro::sound::HybridSoundSpecSwift>(cppType);
     #ifdef NITRO_DEBUG
     if (swiftWrapper == nullptr) [[unlikely]] {

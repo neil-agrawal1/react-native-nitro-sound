@@ -18,7 +18,6 @@ namespace margelo::nitro::sound { struct PlaybackEndType; }
 
 #include <NitroModules/Promise.hpp>
 #include <NitroModules/JPromise.hpp>
-#include <NitroModules/JUnit.hpp>
 #include "RecordingMode.hpp"
 #include "JRecordingMode.hpp"
 #include <string>
@@ -28,7 +27,6 @@ namespace margelo::nitro::sound { struct PlaybackEndType; }
 #include "RecordBackType.hpp"
 #include <functional>
 #include "JFunc_void_RecordBackType.hpp"
-#include <NitroModules/JNICallable.hpp>
 #include "JRecordBackType.hpp"
 #include "PlayBackType.hpp"
 #include "JFunc_void_PlayBackType.hpp"
@@ -60,12 +58,6 @@ namespace margelo::nitro::sound {
   void JHybridSoundSpec::dispose() noexcept {
     static const auto method = javaClassStatic()->getMethod<void()>("dispose");
     method(_javaPart);
-  }
-
-  std::string JHybridSoundSpec::toString() {
-    static const auto method = javaClassStatic()->getMethod<jni::JString()>("toString");
-    auto javaString = method(_javaPart);
-    return javaString->toStdString();
   }
 
   // Properties

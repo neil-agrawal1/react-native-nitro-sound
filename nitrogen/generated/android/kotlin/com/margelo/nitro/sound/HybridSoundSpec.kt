@@ -10,8 +10,7 @@ package com.margelo.nitro.sound
 import androidx.annotation.Keep
 import com.facebook.jni.HybridData
 import com.facebook.proguard.annotations.DoNotStrip
-import com.margelo.nitro.core.Promise
-import com.margelo.nitro.core.HybridObject
+import com.margelo.nitro.core.*
 
 /**
  * A Kotlin class representing the Sound HybridObject.
@@ -35,11 +34,6 @@ abstract class HybridSoundSpec: HybridObject() {
   override fun updateNative(hybridData: HybridData) {
     mHybridData = hybridData
     super.updateNative(hybridData)
-  }
-
-  // Default implementation of `HybridObject.toString()`
-  override fun toString(): String {
-    return "[HybridObject Sound]"
   }
 
   // Properties
@@ -347,6 +341,6 @@ abstract class HybridSoundSpec: HybridObject() {
   private external fun initHybrid(): HybridData
 
   companion object {
-    protected const val TAG = "HybridSoundSpec"
+    private const val TAG = "HybridSoundSpec"
   }
 }

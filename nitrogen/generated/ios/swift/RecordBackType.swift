@@ -5,7 +5,6 @@
 /// Copyright © 2026 Marc Rousavy @ Margelo
 ///
 
-import Foundation
 import NitroModules
 
 /**
@@ -41,30 +40,65 @@ public extension RecordBackType {
     }())
   }
 
-  @inline(__always)
   var isRecording: Bool? {
-    return { () -> Bool? in
-      if bridge.has_value_std__optional_bool_(self.__isRecording) {
-        let __unwrapped = bridge.get_std__optional_bool_(self.__isRecording)
-        return __unwrapped
-      } else {
-        return nil
-      }
-    }()
+    @inline(__always)
+    get {
+      return self.__isRecording.value
+    }
+    @inline(__always)
+    set {
+      self.__isRecording = { () -> bridge.std__optional_bool_ in
+        if let __unwrappedValue = newValue {
+          return bridge.create_std__optional_bool_(__unwrappedValue)
+        } else {
+          return .init()
+        }
+      }()
+    }
   }
   
-  @inline(__always)
   var currentPosition: Double {
-    return self.__currentPosition
+    @inline(__always)
+    get {
+      return self.__currentPosition
+    }
+    @inline(__always)
+    set {
+      self.__currentPosition = newValue
+    }
   }
   
-  @inline(__always)
   var currentMetering: Double? {
-    return self.__currentMetering.value
+    @inline(__always)
+    get {
+      return self.__currentMetering.value
+    }
+    @inline(__always)
+    set {
+      self.__currentMetering = { () -> bridge.std__optional_double_ in
+        if let __unwrappedValue = newValue {
+          return bridge.create_std__optional_double_(__unwrappedValue)
+        } else {
+          return .init()
+        }
+      }()
+    }
   }
   
-  @inline(__always)
   var recordSecs: Double? {
-    return self.__recordSecs.value
+    @inline(__always)
+    get {
+      return self.__recordSecs.value
+    }
+    @inline(__always)
+    set {
+      self.__recordSecs = { () -> bridge.std__optional_double_ in
+        if let __unwrappedValue = newValue {
+          return bridge.create_std__optional_double_(__unwrappedValue)
+        } else {
+          return .init()
+        }
+      }()
+    }
   }
 }

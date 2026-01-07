@@ -78,13 +78,6 @@ public protocol HybridSoundSpec_protocol: HybridObject {
   func transcribeAudioFile(filePath: String) throws -> Promise<String>
 }
 
-public extension HybridSoundSpec_protocol {
-  /// Default implementation of ``HybridObject.toString``
-  func toString() -> String {
-    return "[HybridObject Sound]"
-  }
-}
-
 /// See ``HybridSoundSpec``
 open class HybridSoundSpec_base: NSObject {
   private weak var cxxWrapper: HybridSoundSpec_cxx? = nil

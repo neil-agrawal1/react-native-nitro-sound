@@ -5,7 +5,6 @@
 /// Copyright © 2026 Marc Rousavy @ Margelo
 ///
 
-import Foundation
 import NitroModules
 
 /**
@@ -23,13 +22,25 @@ public extension PlaybackEndType {
     self.init(duration, currentPosition)
   }
 
-  @inline(__always)
   var duration: Double {
-    return self.__duration
+    @inline(__always)
+    get {
+      return self.__duration
+    }
+    @inline(__always)
+    set {
+      self.__duration = newValue
+    }
   }
   
-  @inline(__always)
   var currentPosition: Double {
-    return self.__currentPosition
+    @inline(__always)
+    get {
+      return self.__currentPosition
+    }
+    @inline(__always)
+    set {
+      self.__currentPosition = newValue
+    }
   }
 }

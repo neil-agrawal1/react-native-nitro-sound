@@ -41,15 +41,16 @@ namespace margelo::nitro::sound {
     [[maybe_unused]]
     static jni::alias_ref<JRecordingMode> fromCpp(RecordingMode value) {
       static const auto clazz = javaClassStatic();
+      static const auto fieldIDLE = clazz->getStaticField<JRecordingMode>("IDLE");
+      static const auto fieldMANUAL = clazz->getStaticField<JRecordingMode>("MANUAL");
+      static const auto fieldVAD = clazz->getStaticField<JRecordingMode>("VAD");
+      
       switch (value) {
         case RecordingMode::IDLE:
-          static const auto fieldIDLE = clazz->getStaticField<JRecordingMode>("IDLE");
           return clazz->getStaticFieldValue(fieldIDLE);
         case RecordingMode::MANUAL:
-          static const auto fieldMANUAL = clazz->getStaticField<JRecordingMode>("MANUAL");
           return clazz->getStaticFieldValue(fieldMANUAL);
         case RecordingMode::VAD:
-          static const auto fieldVAD = clazz->getStaticField<JRecordingMode>("VAD");
           return clazz->getStaticFieldValue(fieldVAD);
         default:
           std::string stringValue = std::to_string(static_cast<int>(value));

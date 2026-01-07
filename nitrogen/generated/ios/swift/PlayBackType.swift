@@ -5,7 +5,6 @@
 /// Copyright © 2026 Marc Rousavy @ Margelo
 ///
 
-import Foundation
 import NitroModules
 
 /**
@@ -29,25 +28,42 @@ public extension PlayBackType {
     }(), duration, currentPosition)
   }
 
-  @inline(__always)
   var isMuted: Bool? {
-    return { () -> Bool? in
-      if bridge.has_value_std__optional_bool_(self.__isMuted) {
-        let __unwrapped = bridge.get_std__optional_bool_(self.__isMuted)
-        return __unwrapped
-      } else {
-        return nil
-      }
-    }()
+    @inline(__always)
+    get {
+      return self.__isMuted.value
+    }
+    @inline(__always)
+    set {
+      self.__isMuted = { () -> bridge.std__optional_bool_ in
+        if let __unwrappedValue = newValue {
+          return bridge.create_std__optional_bool_(__unwrappedValue)
+        } else {
+          return .init()
+        }
+      }()
+    }
   }
   
-  @inline(__always)
   var duration: Double {
-    return self.__duration
+    @inline(__always)
+    get {
+      return self.__duration
+    }
+    @inline(__always)
+    set {
+      self.__duration = newValue
+    }
   }
   
-  @inline(__always)
   var currentPosition: Double {
-    return self.__currentPosition
+    @inline(__always)
+    get {
+      return self.__currentPosition
+    }
+    @inline(__always)
+    set {
+      self.__currentPosition = newValue
+    }
   }
 }

@@ -428,7 +428,7 @@ namespace margelo::nitro::sound::bridge::swift {
    */
   using std__shared_ptr_HybridSoundSpec_ = std::shared_ptr<HybridSoundSpec>;
   std::shared_ptr<HybridSoundSpec> create_std__shared_ptr_HybridSoundSpec_(void* _Nonnull swiftUnsafePointer) noexcept;
-  void* _Nonnull get_std__shared_ptr_HybridSoundSpec_(std__shared_ptr_HybridSoundSpec_ cppType);
+  void* _Nonnull get_std__shared_ptr_HybridSoundSpec_(std__shared_ptr_HybridSoundSpec_ cppType) noexcept;
   
   // pragma MARK: std::weak_ptr<HybridSoundSpec>
   using std__weak_ptr_HybridSoundSpec_ = std::weak_ptr<HybridSoundSpec>;
