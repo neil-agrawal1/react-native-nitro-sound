@@ -874,7 +874,7 @@ import MediaPlayer
         try FileManager.default.moveItem(at: tempURL, to: url)
 
         let trimmedDuration = Double(framesToKeep) / sampleRate
-        bridgedLog("✂️ Trimmed \(String(format: "%.1f", seconds))s → \(String(format: "%.1f", trimmedDuration))s")
+        bridgedLog("✂️ Trim: \(String(format: "%.1f", originalDuration))s original → removed \(String(format: "%.1f", seconds))s silence → \(String(format: "%.1f", trimmedDuration))s final")
     }
 
     private func resampleRecording(fileURL: URL) throws {
@@ -1356,6 +1356,11 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                         }
 
                         if self.manualSilenceFrameCount >= self.manualSilenceThreshold {
+                            let endTime = Date()
+                            let formatter = DateFormatter()
+                            formatter.dateFormat = "HH:mm:ss.SSS"
+                            self.bridgedLog("🛑 Recording ended at \(formatter.string(from: endTime)) (silence timeout reached)")
+
                             self.manualSilenceFrameCount = 0  // Reset counter
 
                             // Close segment and get metadata (NO callback yet)
@@ -1736,7 +1741,10 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
 
             // Start new manual segment
             self.startNewSegment(with: targetFormat)
-            self.bridgedLog("🎙️ Recording started (silence timeout: \(Int(timeoutSeconds))s)")
+            let now = Date()
+            let formatter = DateFormatter()
+            formatter.dateFormat = "HH:mm:ss.SSS"
+            self.bridgedLog("🎙️ Recording started at \(formatter.string(from: now)) (silence timeout: \(Int(timeoutSeconds))s)")
 
             promise.resolve(withResult: ())
         }
