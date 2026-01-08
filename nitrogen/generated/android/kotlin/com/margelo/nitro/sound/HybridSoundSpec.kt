@@ -82,6 +82,10 @@ abstract class HybridSoundSpec: HybridObject() {
   
   @DoNotStrip
   @Keep
+  abstract fun isInPlaybackOnlyMode(): Boolean
+  
+  @DoNotStrip
+  @Keep
   abstract fun startManualSegment(silenceTimeoutSeconds: Double?): Promise<Unit>
   
   @DoNotStrip

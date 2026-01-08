@@ -125,6 +125,16 @@ export interface Sound
    */
   isSegmentRecording(): Promise<boolean>;
 
+  /**
+   * Check if the audio engine is in playback-only mode (no recording available).
+   * This happens after an audio interruption (e.g., phone call) when PlayAndRecord
+   * restart fails from background - we fall back to playback-only to keep white noise
+   * and alarm working, but recording is unavailable until the app comes to foreground.
+   *
+   * @returns true if in playback-only mode (recording unavailable), false if recording is available
+   */
+  isInPlaybackOnlyMode(): boolean;
+
   // Manual segment control (separate from mode setting)
   startManualSegment(silenceTimeoutSeconds?: number): Promise<void>;
   stopManualSegment(): Promise<void>;

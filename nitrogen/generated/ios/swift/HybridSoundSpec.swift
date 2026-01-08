@@ -24,6 +24,7 @@ public protocol HybridSoundSpec_protocol: HybridObject {
   func setIdleMode() throws -> Promise<Void>
   func getCurrentMode() throws -> Promise<RecordingMode>
   func isSegmentRecording() throws -> Promise<Bool>
+  func isInPlaybackOnlyMode() throws -> Bool
   func startManualSegment(silenceTimeoutSeconds: Double?) throws -> Promise<Void>
   func stopManualSegment() throws -> Promise<Void>
   func setVADThreshold(threshold: Double) throws -> Promise<Void>

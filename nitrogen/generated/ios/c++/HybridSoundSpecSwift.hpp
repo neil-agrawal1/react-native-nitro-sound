@@ -153,6 +153,14 @@ namespace margelo::nitro::sound {
       auto __value = std::move(__result.value());
       return __value;
     }
+    inline bool isInPlaybackOnlyMode() override {
+      auto __result = _swiftPart.isInPlaybackOnlyMode();
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+      auto __value = std::move(__result.value());
+      return __value;
+    }
     inline std::shared_ptr<Promise<void>> startManualSegment(std::optional<double> silenceTimeoutSeconds) override {
       auto __result = _swiftPart.startManualSegment(silenceTimeoutSeconds);
       if (__result.hasError()) [[unlikely]] {

@@ -45,6 +45,10 @@ import MediaPlayer
     }
     private var currentMode: SegmentMode = .idle
 
+    // Track if we're in degraded playback-only mode (after interruption recovery failure)
+    // When true, recording methods will fail - only playback is available
+    private var isPlaybackOnlyMode: Bool = false
+
     // Crossfade state management
     private var crossfadeTimer: Timer?
     private var isCrossfading: Bool = false
@@ -284,16 +288,100 @@ import MediaPlayer
                         bridgedLog("⚠️ Not resuming playback: shouldResume=\(shouldResume), sessionReactivated=\(sessionReactivated)")
                     }
                 } catch {
-                    // In background with locked device, reactivation might fail
-                    // This is OK - the next audio operation (alarm, silent loop restart) will reinitialize
+                    // PlayAndRecord restart failed - fall back to playback-only mode
+                    // This happens when the app is backgrounded and iOS won't grant mic access
                     let nsError = error as NSError
                     let errorCode = nsError.code
-                    
-                    bridgedLog("❌ Engine restart failed during interruption recovery")
-                    bridgedLog("   Error: \(error.localizedDescription)")
-                    bridgedLog("   Error code: \(errorCode)")
-                    logStateSnapshot(context: "after-restart-failure")
-                    // Don't crash - next operation will handle reinitialization
+
+                    bridgedLog("❌ PlayAndRecord restart failed: \(error.localizedDescription) (code: \(errorCode))")
+                    bridgedLog("⚠️ Falling back to playback-only mode...")
+                    logStateSnapshot(context: "before-playback-only-fallback")
+
+                    do {
+                        // Tear down current engine completely
+                        audioEngine?.stop()
+                        audioEngine = nil
+                        audioPlayerNodeA = nil
+                        audioPlayerNodeB = nil
+                        audioPlayerNodeC = nil
+                        audioPlayerNodeD = nil
+                        audioEngineInitialized = false
+                        currentMode = .idle
+
+                        // Configure audio session for playback only (no mic)
+                        let audioSession = AVAudioSession.sharedInstance()
+                        try audioSession.setCategory(.playback, mode: .default, options: [.mixWithOthers])
+                        try audioSession.setActive(true)
+
+                        // Create new playback-only engine
+                        let engine = AVAudioEngine()
+                        audioEngine = engine
+
+                        let playerA = AVAudioPlayerNode()
+                        let playerB = AVAudioPlayerNode()
+                        let playerC = AVAudioPlayerNode()
+                        let playerD = AVAudioPlayerNode()
+
+                        audioPlayerNodeA = playerA
+                        audioPlayerNodeB = playerB
+                        audioPlayerNodeC = playerC
+                        audioPlayerNodeD = playerD
+
+                        // Reset currentPlayerNode to new primary player (fixes crash when pressing play after fallback)
+                        currentPlayerNode = playerA
+                        activePlayer = .playerA
+
+                        engine.attach(playerA)
+                        engine.attach(playerB)
+                        engine.attach(playerC)
+                        engine.attach(playerD)
+
+                        let mainMixer = engine.mainMixerNode
+                        engine.connect(playerA, to: mainMixer, format: nil)
+                        engine.connect(playerB, to: mainMixer, format: nil)
+                        engine.connect(playerC, to: mainMixer, format: nil)
+                        engine.connect(playerD, to: mainMixer, format: nil)
+
+                        // CRITICAL: Do NOT touch engine.inputNode with .playback category!
+
+                        try engine.start()
+                        audioEngineInitialized = true
+                        isPlaybackOnlyMode = true
+
+                        bridgedLog("✅ Playback-only fallback succeeded")
+                        logStateSnapshot(context: "after-playback-only-fallback")
+
+                        // Resume playback if it was active
+                        if shouldLoopPlayback, let audioFile = currentAudioFile, let uri = currentPlaybackURI {
+                            bridgedLog("🔄 Resuming loop playback after fallback to playback-only mode")
+                            let url: URL
+                            if uri.hasPrefix("file://") {
+                                url = URL(string: uri)!
+                            } else {
+                                url = URL(fileURLWithPath: uri)
+                            }
+                            startSeamlessLoop(audioFile: audioFile, url: url)
+                            bridgedLog("✅ White noise resumed in playback-only mode")
+                        }
+
+                        // Resume ambient loop if it was playing
+                        if isAmbientLoopPlaying, let playerD = audioPlayerNodeD, let ambientFile = currentAmbientFile {
+                            bridgedLog("🔄 Resuming ambient loop after fallback to playback-only mode")
+                            playerD.scheduleFile(ambientFile, at: nil, completionHandler: nil)
+                            playerD.scheduleFile(ambientFile, at: nil, completionHandler: nil)
+                            playerD.scheduleFile(ambientFile, at: nil) { [weak self] in
+                                self?.scheduleMoreAmbientLoops(audioFile: ambientFile, playerNode: playerD)
+                            }
+                            playerD.play()
+                            bridgedLog("✅ Ambient loop resumed in playback-only mode")
+                        }
+
+                    } catch {
+                        bridgedLog("❌ Playback-only fallback also failed: \(error.localizedDescription)")
+                        logStateSnapshot(context: "playback-only-fallback-failed")
+                        // At this point both PlayAndRecord and Playback-only failed
+                        // App will be silent but alarm can still use local notifications
+                    }
                 }
             } else {
                 bridgedLog("⚠️ Engine not initialized - skipping restart")
@@ -314,7 +402,8 @@ import MediaPlayer
 
         // Recording state
         let mode = currentMode == .idle ? "idle" : (currentMode == .manual ? "manual" : "vad")
-        let hasTap = audioEngine?.inputNode.engine != nil
+        // Guard inputNode access - crashes in playback-only mode
+        let hasTap = isPlaybackOnlyMode ? false : (audioEngine?.inputNode.engine != nil)
         let hasSegment = currentSegmentFile != nil
 
         // Engine state
@@ -468,6 +557,7 @@ import MediaPlayer
         do {
             try engine.start()
             audioEngineInitialized = true
+            isPlaybackOnlyMode = false  // Reset flag - we have full PlayAndRecord capability
             bridgedLog("🟩🟩🟩  🎙️ AUDIO ENGINE: PLAY+RECORD MODE 🎙️  🟩🟩🟩")
         } catch {
             let nsError = error as NSError
@@ -1425,8 +1515,8 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                 }
             }
 
-            // Remove tap from unified engine's input node
-            if let engine = self.audioEngine {
+            // Remove tap from unified engine's input node (skip in playback-only mode)
+            if !self.isPlaybackOnlyMode, let engine = self.audioEngine {
                 engine.inputNode.removeTap(onBus: 0)
             }
 
@@ -1483,8 +1573,8 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
             self.audioPlayerNodeC?.stop()
             self.audioPlayerNodeD?.stop()
 
-            // Step 3: Remove microphone tap
-            if let engine = self.audioEngine {
+            // Step 3: Remove microphone tap (skip in playback-only mode)
+            if !self.isPlaybackOnlyMode, let engine = self.audioEngine {
                 engine.inputNode.removeTap(onBus: 0)
             }
 
@@ -1686,6 +1776,13 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                 return
             }
 
+            // Guard: Recording unavailable in playback-only mode
+            if self.isPlaybackOnlyMode {
+                self.bridgedLog("⚠️ setManualMode() rejected - in playback-only mode after interruption")
+                promise.reject(withError: RuntimeError.error(withMessage: "Recording unavailable - in playback-only mode after interruption"))
+                return
+            }
+
             // Force close any existing segment (might be from auto detection)
             if self.currentSegmentFile != nil {
                 self.currentSegmentFile = nil
@@ -1810,6 +1907,13 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
                 return
             }
 
+            // Guard: Recording unavailable in playback-only mode
+            if self.isPlaybackOnlyMode {
+                self.bridgedLog("⚠️ setVADMode() rejected - in playback-only mode after interruption")
+                promise.reject(withError: RuntimeError.error(withMessage: "Recording unavailable - in playback-only mode after interruption"))
+                return
+            }
+
             // End any current segment before mode switch
             if self.currentSegmentFile != nil {
                 self.bridgedLog("⚠️ Closing existing segment before VAD mode")
@@ -1865,6 +1969,18 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
 
         promise.resolve(withResult: isRecording)
         return promise
+    }
+
+    /**
+     * Check if the audio engine is in playback-only mode (no recording available).
+     * This happens after an audio interruption (e.g., phone call) when PlayAndRecord
+     * restart fails from background - we fall back to playback-only to keep white noise
+     * and alarm working, but recording is unavailable until the app comes to foreground.
+     *
+     * @returns true if in playback-only mode, false if recording is available
+     */
+    public func isInPlaybackOnlyMode() throws -> Bool {
+        return isPlaybackOnlyMode
     }
 
     public func setVADThreshold(threshold: Double) throws -> Promise<Void> {
@@ -3299,8 +3415,8 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
         crossfadeTimer?.invalidate()
         loopCrossfadeTimer?.cancel()
 
-        // Cleanup unified audio engine if needed
-        if let engine = audioEngine {
+        // Cleanup unified audio engine if needed (skip inputNode in playback-only mode)
+        if !isPlaybackOnlyMode, let engine = audioEngine {
             engine.inputNode.removeTap(onBus: 0)
             // Don't stop the engine here as it might be used by other instances
         }
