@@ -2179,13 +2179,19 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
     }
 
     private func triggerSeamlessLoopCrossfade(audioFile: AVAudioFile, url: URL) {
+        bridgedLog("🔄 triggerSeamlessLoopCrossfade ENTER - url: \(url.lastPathComponent)")
+        bridgedLog("   shouldLoopPlayback: \(self.shouldLoopPlayback), isLoopCrossfadeActive: \(self.isLoopCrossfadeActive)")
+        bridgedLog("   url match: \(url.absoluteString == self.currentLoopingFileURI) (current: \(self.currentLoopingFileURI?.components(separatedBy: "/").last ?? "nil"))")
+
         guard self.shouldLoopPlayback,
               !self.isLoopCrossfadeActive,
               url.absoluteString == self.currentLoopingFileURI else {
+            bridgedLog("🔄 triggerSeamlessLoopCrossfade SKIPPED - guard failed")
             return
         }
 
         self.isLoopCrossfadeActive = true
+        bridgedLog("🔄 triggerSeamlessLoopCrossfade PROCEEDING - crossfade active")
 
         // Get alternate player node
         let newNode: AVAudioPlayerNode
@@ -2237,8 +2243,13 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
     public func setLoopEnabled(enabled: Bool) throws -> Promise<String> {
         let promise = Promise<String>()
 
+        let previousState = self.shouldLoopPlayback
         self.shouldLoopPlayback = enabled
         let status = enabled ? "enabled" : "disabled"
+
+        bridgedLog("🔁 setLoopEnabled: \(status) (was: \(previousState ? "enabled" : "disabled"))")
+        bridgedLog("   currentPlayerNode: \(self.getNodeName(for: self.currentPlayerNode)), playing: \(self.currentPlayerNode?.isPlaying ?? false)")
+        bridgedLog("   currentLoopingFileURI: \(self.currentLoopingFileURI ?? "nil")")
 
         promise.resolve(withResult: "Loop \(status)")
         return promise
