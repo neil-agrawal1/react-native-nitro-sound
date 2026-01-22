@@ -1795,7 +1795,7 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
             self.silenceFrameCount = 0
             self.manualSilenceFrameCount = 0
 
-            self.bridgedLog("🔧 Switched to manual mode")
+            self.bridgedLog("🚀🚀🚀 SUBMODULE TEST - Switched to manual mode 🚀🚀🚀")
             promise.resolve(withResult: ())
         }
 
