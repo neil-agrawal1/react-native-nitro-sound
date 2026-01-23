@@ -116,6 +116,7 @@ namespace margelo::nitro::sound {
     std::string mmss(double secs) override;
     std::string mmssss(double milisecs) override;
     std::shared_ptr<Promise<std::string>> transcribeAudioFile(const std::string& filePath) override;
+    std::shared_ptr<Promise<std::string>> testMethod(const std::string& input) override;
 
   private:
     friend HybridBase;

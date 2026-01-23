@@ -2906,6 +2906,14 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
         return promise
     }
 
+    // MARK: - Test Method
+    public func testMethod(input: String) throws -> Promise<String> {
+        let promise = Promise<String>()
+        self.bridgedLog("🧪 testMethod called with: \(input)")
+        promise.resolve(withResult: "Native received: \(input)")
+        return promise
+    }
+
     // MARK: - Crossfade Methods
     public func crossfadeTo(uri: String, duration: Double? = 3.0, targetVolume: Double? = 1.0) throws -> Promise<String> {
         let promise = Promise<String>()

@@ -77,6 +77,7 @@ public protocol HybridSoundSpec_protocol: HybridObject {
   func mmss(secs: Double) throws -> String
   func mmssss(milisecs: Double) throws -> String
   func transcribeAudioFile(filePath: String) throws -> Promise<String>
+  func testMethod(input: String) throws -> Promise<String>
 }
 
 /// See ``HybridSoundSpec``

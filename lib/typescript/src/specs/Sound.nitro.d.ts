@@ -198,5 +198,11 @@ export interface Sound extends HybridObject<{
      * @throws Error if file not found or speech recognition unavailable
      */
     transcribeAudioFile(filePath: string): Promise<string>;
+    /**
+     * Simple test method to verify native bridge is working
+     * @param input Any string to echo back
+     * @returns Promise resolving to "Native received: {input}"
+     */
+    testMethod(input: string): Promise<string>;
 }
 //# sourceMappingURL=Sound.nitro.d.ts.map
