@@ -1,4 +1,3 @@
-
 import Foundation
 import AVFoundation
 import NitroModules
@@ -8,9 +7,6 @@ import Speech
 import MediaPlayer
 
     final class HybridSound: HybridSoundSpec_base, HybridSoundSpec_protocol, SNResultsObserving {
-    // Removed AVAudioRecorder - now using unified AVAudioEngine recording
-
-    // Unified Audio Engine - single engine for recording and playback
     private var audioEngine: AVAudioEngine?
     private var audioEngineInitialized = false
     private let engineInitLock = NSLock() // Thread-safe initialization guard
@@ -689,20 +685,6 @@ import MediaPlayer
             }
         }
 
-        return promise
-    }
-
-    // MARK: - Legacy Recording Methods (stubs for backwards compatibility)
-
-    public func pauseRecorder() throws -> Promise<String> {
-        let promise = Promise<String>()
-        promise.reject(withError: RuntimeError.error(withMessage: "Pause/resume not supported with unified recording. Use start/stop instead."))
-        return promise
-    }
-
-    public func resumeRecorder() throws -> Promise<String> {
-        let promise = Promise<String>()
-        promise.reject(withError: RuntimeError.error(withMessage: "Pause/resume not supported with unified recording. Use start/stop instead."))
         return promise
     }
 
@@ -2255,20 +2237,6 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
         return promise
     }
 
-    public func restartEngine() throws -> Promise<Void> {
-        let promise = Promise<Void>()
-
-        do {
-            try restartAudioEngine()
-            promise.resolve(withResult: ())
-        } catch {
-            bridgedLog("❌ Failed to restart engine: \(error.localizedDescription)")
-            promise.reject(withError: RuntimeError.error(withMessage: "Failed to restart engine: \(error.localizedDescription)"))
-        }
-
-        return promise
-    }
-
     public func stopPlayer() throws -> Promise<String> {
         let promise = Promise<String>()
 
@@ -2509,20 +2477,6 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
         return promise
     }
 
-    public func setPlaybackSpeed(playbackSpeed: Double) throws -> Promise<String> {
-        let promise = Promise<String>()
-
-        // Persist desired rate for future players
-        self.playbackRate = playbackSpeed
-
-        // Note: AVAudioPlayerNode doesn't support rate changes like AVAudioPlayer
-        // This would require using AVAudioUnitTimePitch effect node
-        // For now, we'll just store the rate for future use
-        promise.resolve(withResult: "Playback speed stored (rate change not yet supported with unified engine)")
-
-        return promise
-    }
-
     // MARK: - Public Now Playing Methods
 
     /// Public method to update Now Playing info from TypeScript
@@ -2679,22 +2633,7 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
         return promise
     }
 
-    // MARK: - Subscription
-
-    public func setSubscriptionDuration(sec: Double) throws {
-        self.subscriptionDuration = sec
-    }
-
     // MARK: - Listeners
-
-    public func addRecordBackListener(callback: @escaping (RecordBackType) -> Void) throws {
-        // Removed - only used with AVAudioRecorder metering
-        // Buffer recorder uses direct file writing without metering callbacks
-    }
-
-    public func removeRecordBackListener() throws {
-        // Removed - only used with AVAudioRecorder metering
-    }
 
     public func addPlayBackListener(callback: @escaping (PlayBackType) -> Void) throws {
         self.playBackListener = callback
@@ -2778,10 +2717,6 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
 
     public func writeDebugLog(message: String) throws {
         FileLogger.shared.log(message)
-    }
-
-    public func getDebugLogPath() throws -> String {
-        return FileLogger.shared.getCurrentLogPath() ?? ""
     }
 
     public func getAllDebugLogPaths() throws -> [String] {
@@ -2903,14 +2838,6 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
             }
         }
         
-        return promise
-    }
-
-    // MARK: - Test Method
-    public func testMethod(input: String) throws -> Promise<String> {
-        let promise = Promise<String>()
-        self.bridgedLog("🧪 testMethod called with: \(input)")
-        promise.resolve(withResult: "Native received: \(input)")
         return promise
     }
 

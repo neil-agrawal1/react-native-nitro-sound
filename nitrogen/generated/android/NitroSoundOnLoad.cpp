@@ -16,7 +16,6 @@
 #include <NitroModules/HybridObjectRegistry.hpp>
 
 #include "JHybridSoundSpec.hpp"
-#include "JFunc_void_RecordBackType.hpp"
 #include "JFunc_void_PlayBackType.hpp"
 #include "JFunc_void_PlaybackEndType.hpp"
 #include "JFunc_void_std__string.hpp"
@@ -34,7 +33,6 @@ int initialize(JavaVM* vm) {
   return facebook::jni::initialize(vm, [] {
     // Register native JNI methods
     margelo::nitro::sound::JHybridSoundSpec::registerNatives();
-    margelo::nitro::sound::JFunc_void_RecordBackType_cxx::registerNatives();
     margelo::nitro::sound::JFunc_void_PlayBackType_cxx::registerNatives();
     margelo::nitro::sound::JFunc_void_PlaybackEndType_cxx::registerNatives();
     margelo::nitro::sound::JFunc_void_std__string_cxx::registerNatives();

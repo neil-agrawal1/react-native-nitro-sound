@@ -14,8 +14,6 @@ namespace NitroSound { class HybridSoundSpec_cxx; }
 
 // Forward declaration of `RecordingMode` to properly resolve imports.
 namespace margelo::nitro::sound { enum class RecordingMode; }
-// Forward declaration of `RecordBackType` to properly resolve imports.
-namespace margelo::nitro::sound { struct RecordBackType; }
 // Forward declaration of `PlayBackType` to properly resolve imports.
 namespace margelo::nitro::sound { struct PlayBackType; }
 // Forward declaration of `PlaybackEndType` to properly resolve imports.
@@ -26,9 +24,8 @@ namespace margelo::nitro::sound { struct PlaybackEndType; }
 #include <optional>
 #include <string>
 #include <unordered_map>
-#include "RecordBackType.hpp"
-#include <functional>
 #include "PlayBackType.hpp"
+#include <functional>
 #include "PlaybackEndType.hpp"
 #include <vector>
 
@@ -185,22 +182,6 @@ namespace margelo::nitro::sound {
       auto __value = std::move(__result.value());
       return __value;
     }
-    inline std::shared_ptr<Promise<std::string>> pauseRecorder() override {
-      auto __result = _swiftPart.pauseRecorder();
-      if (__result.hasError()) [[unlikely]] {
-        std::rethrow_exception(__result.error());
-      }
-      auto __value = std::move(__result.value());
-      return __value;
-    }
-    inline std::shared_ptr<Promise<std::string>> resumeRecorder() override {
-      auto __result = _swiftPart.resumeRecorder();
-      if (__result.hasError()) [[unlikely]] {
-        std::rethrow_exception(__result.error());
-      }
-      auto __value = std::move(__result.value());
-      return __value;
-    }
     inline std::shared_ptr<Promise<std::string>> startPlayer(const std::optional<std::string>& uri, const std::optional<std::unordered_map<std::string, std::string>>& httpHeaders) override {
       auto __result = _swiftPart.startPlayer(uri, httpHeaders);
       if (__result.hasError()) [[unlikely]] {
@@ -243,14 +224,6 @@ namespace margelo::nitro::sound {
     }
     inline std::shared_ptr<Promise<std::string>> setVolume(double volume) override {
       auto __result = _swiftPart.setVolume(std::forward<decltype(volume)>(volume));
-      if (__result.hasError()) [[unlikely]] {
-        std::rethrow_exception(__result.error());
-      }
-      auto __value = std::move(__result.value());
-      return __value;
-    }
-    inline std::shared_ptr<Promise<std::string>> setPlaybackSpeed(double playbackSpeed) override {
-      auto __result = _swiftPart.setPlaybackSpeed(std::forward<decltype(playbackSpeed)>(playbackSpeed));
       if (__result.hasError()) [[unlikely]] {
         std::rethrow_exception(__result.error());
       }
@@ -305,14 +278,6 @@ namespace margelo::nitro::sound {
       auto __value = std::move(__result.value());
       return __value;
     }
-    inline std::shared_ptr<Promise<void>> restartEngine() override {
-      auto __result = _swiftPart.restartEngine();
-      if (__result.hasError()) [[unlikely]] {
-        std::rethrow_exception(__result.error());
-      }
-      auto __value = std::move(__result.value());
-      return __value;
-    }
     inline std::shared_ptr<Promise<std::string>> crossfadeTo(const std::string& uri, std::optional<double> duration, std::optional<double> targetVolume) override {
       auto __result = _swiftPart.crossfadeTo(uri, duration, targetVolume);
       if (__result.hasError()) [[unlikely]] {
@@ -344,24 +309,6 @@ namespace margelo::nitro::sound {
       }
       auto __value = std::move(__result.value());
       return __value;
-    }
-    inline void setSubscriptionDuration(double sec) override {
-      auto __result = _swiftPart.setSubscriptionDuration(std::forward<decltype(sec)>(sec));
-      if (__result.hasError()) [[unlikely]] {
-        std::rethrow_exception(__result.error());
-      }
-    }
-    inline void addRecordBackListener(const std::function<void(const RecordBackType& /* recordingMeta */)>& callback) override {
-      auto __result = _swiftPart.addRecordBackListener(callback);
-      if (__result.hasError()) [[unlikely]] {
-        std::rethrow_exception(__result.error());
-      }
-    }
-    inline void removeRecordBackListener() override {
-      auto __result = _swiftPart.removeRecordBackListener();
-      if (__result.hasError()) [[unlikely]] {
-        std::rethrow_exception(__result.error());
-      }
     }
     inline void addPlayBackListener(const std::function<void(const PlayBackType& /* playbackMeta */)>& callback) override {
       auto __result = _swiftPart.addPlayBackListener(callback);
@@ -467,14 +414,6 @@ namespace margelo::nitro::sound {
         std::rethrow_exception(__result.error());
       }
     }
-    inline std::string getDebugLogPath() override {
-      auto __result = _swiftPart.getDebugLogPath();
-      if (__result.hasError()) [[unlikely]] {
-        std::rethrow_exception(__result.error());
-      }
-      auto __value = std::move(__result.value());
-      return __value;
-    }
     inline std::vector<std::string> getAllDebugLogPaths() override {
       auto __result = _swiftPart.getAllDebugLogPaths();
       if (__result.hasError()) [[unlikely]] {
@@ -529,14 +468,6 @@ namespace margelo::nitro::sound {
     }
     inline std::shared_ptr<Promise<std::string>> transcribeAudioFile(const std::string& filePath) override {
       auto __result = _swiftPart.transcribeAudioFile(filePath);
-      if (__result.hasError()) [[unlikely]] {
-        std::rethrow_exception(__result.error());
-      }
-      auto __value = std::move(__result.value());
-      return __value;
-    }
-    inline std::shared_ptr<Promise<std::string>> testMethod(const std::string& input) override {
-      auto __result = _swiftPart.testMethod(input);
       if (__result.hasError()) [[unlikely]] {
         std::rethrow_exception(__result.error());
       }

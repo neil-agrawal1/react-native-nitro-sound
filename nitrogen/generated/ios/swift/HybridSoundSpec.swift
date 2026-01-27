@@ -28,29 +28,22 @@ public protocol HybridSoundSpec_protocol: HybridObject {
   func startManualSegment(silenceTimeoutSeconds: Double?) throws -> Promise<Void>
   func stopManualSegment() throws -> Promise<Void>
   func setVADThreshold(threshold: Double) throws -> Promise<Void>
-  func pauseRecorder() throws -> Promise<String>
-  func resumeRecorder() throws -> Promise<String>
   func startPlayer(uri: String?, httpHeaders: Dictionary<String, String>?) throws -> Promise<String>
   func stopPlayer() throws -> Promise<String>
   func pausePlayer() throws -> Promise<String>
   func resumePlayer() throws -> Promise<String>
   func seekToPlayer(time: Double) throws -> Promise<String>
   func setVolume(volume: Double) throws -> Promise<String>
-  func setPlaybackSpeed(playbackSpeed: Double) throws -> Promise<String>
   func updateNowPlaying(title: String, artist: String, duration: Double, currentTime: Double) throws -> Promise<Void>
   func clearNowPlaying() throws -> Promise<Void>
   func setNowPlayingArtwork(imagePath: String) throws -> Promise<Void>
   func getCurrentPosition() throws -> Promise<Double>
   func getDuration() throws -> Promise<Double>
   func setLoopEnabled(enabled: Bool) throws -> Promise<String>
-  func restartEngine() throws -> Promise<Void>
   func crossfadeTo(uri: String, duration: Double?, targetVolume: Double?) throws -> Promise<String>
   func fadeVolumeTo(targetVolume: Double, duration: Double) throws -> Promise<Void>
   func startAmbientLoop(uri: String, volume: Double, fadeDuration: Double?) throws -> Promise<Void>
   func stopAmbientLoop(fadeDuration: Double?) throws -> Promise<Void>
-  func setSubscriptionDuration(sec: Double) throws -> Void
-  func addRecordBackListener(callback: @escaping (_ recordingMeta: RecordBackType) -> Void) throws -> Void
-  func removeRecordBackListener() throws -> Void
   func addPlayBackListener(callback: @escaping (_ playbackMeta: PlayBackType) -> Void) throws -> Void
   func removePlayBackListener() throws -> Void
   func addPlaybackEndListener(callback: @escaping (_ playbackEndMeta: PlaybackEndType) -> Void) throws -> Void
@@ -68,7 +61,6 @@ public protocol HybridSoundSpec_protocol: HybridObject {
   func removePlayCallback() throws -> Void
   func teardownRemoteCommands() throws -> Promise<Void>
   func writeDebugLog(message: String) throws -> Void
-  func getDebugLogPath() throws -> String
   func getAllDebugLogPaths() throws -> [String]
   func readDebugLog(path: String?) throws -> String
   func clearDebugLogs() throws -> Promise<Void>
@@ -77,7 +69,6 @@ public protocol HybridSoundSpec_protocol: HybridObject {
   func mmss(secs: Double) throws -> String
   func mmssss(milisecs: Double) throws -> String
   func transcribeAudioFile(filePath: String) throws -> Promise<String>
-  func testMethod(input: String) throws -> Promise<String>
 }
 
 /// See ``HybridSoundSpec``

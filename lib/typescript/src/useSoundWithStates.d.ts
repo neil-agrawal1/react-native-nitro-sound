@@ -6,9 +6,6 @@ export type UseSoundWithStatesState = {
         position: number;
         duration: number;
     };
-    recording: {
-        position: number;
-    };
 };
 export type UseSoundWithStates = Omit<UseSound, 'state'> & {
     state: UseSoundWithStatesState;

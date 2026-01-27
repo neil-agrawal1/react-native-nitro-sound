@@ -40,13 +40,6 @@ export enum AudioEncoderAndroidType {
 }
 
 
-export interface RecordBackType {
-  isRecording?: boolean;
-  currentPosition: number;
-  currentMetering?: number;
-  recordSecs?: number;
-}
-
 export interface PlayBackType {
   isMuted?: boolean;
   duration: number;
@@ -58,7 +51,6 @@ export interface PlaybackEndType {
   currentPosition: number;
 }
 
-export type RecordBackListener = (recordingMeta: RecordBackType) => void;
 export type PlayBackListener = (playbackMeta: PlayBackType) => void;
 export type PlaybackEndListener = (playbackEndMeta: PlaybackEndType) => void;
 
@@ -142,10 +134,6 @@ export interface Sound
   // VAD configuration
   setVADThreshold(threshold: number): Promise<void>;
 
-  // Legacy methods (stubs for backwards compatibility)
-  pauseRecorder(): Promise<string>;
-  resumeRecorder(): Promise<string>;
-
   // Playback methods
   startPlayer(
     uri?: string,
@@ -156,7 +144,6 @@ export interface Sound
   resumePlayer(): Promise<string>;
   seekToPlayer(time: number): Promise<string>;
   setVolume(volume: number): Promise<string>;
-  setPlaybackSpeed(playbackSpeed: number): Promise<string>;
 
   // Now Playing (lock screen controls)
   /**
@@ -191,9 +178,6 @@ export interface Sound
   // Loop control methods
   setLoopEnabled(enabled: boolean): Promise<string>;
 
-  // Engine management
-  restartEngine(): Promise<void>;
-
   // Crossfade methods
   crossfadeTo(uri: string, duration?: number, targetVolume?: number): Promise<string>;
 
@@ -204,14 +188,7 @@ export interface Sound
   startAmbientLoop(uri: string, volume: number, fadeDuration?: number): Promise<void>;
   stopAmbientLoop(fadeDuration?: number): Promise<void>;
 
-  // Subscription
-  setSubscriptionDuration(sec: number): void;
-
   // Listeners
-  addRecordBackListener(
-    callback: (recordingMeta: RecordBackType) => void
-  ): void;
-  removeRecordBackListener(): void;
   addPlayBackListener(callback: (playbackMeta: PlayBackType) => void): void;
   removePlayBackListener(): void;
   addPlaybackEndListener(
@@ -249,7 +226,6 @@ export interface Sound
 
   // Debug logging methods
   writeDebugLog(message: string): void;
-  getDebugLogPath(): string;
   getAllDebugLogPaths(): string[];
   readDebugLog(path?: string): string;
   clearDebugLogs(): Promise<void>;
@@ -273,11 +249,4 @@ export interface Sound
    * @throws Error if file not found or speech recognition unavailable
    */
   transcribeAudioFile(filePath: string): Promise<string>;
-
-  /**
-   * Simple test method to verify native bridge is working
-   * @param input Any string to echo back
-   * @returns Promise resolving to "Native received: {input}"
-   */
-  testMethod(input: string): Promise<string>;
 }

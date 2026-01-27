@@ -98,14 +98,6 @@ abstract class HybridSoundSpec: HybridObject() {
   
   @DoNotStrip
   @Keep
-  abstract fun pauseRecorder(): Promise<String>
-  
-  @DoNotStrip
-  @Keep
-  abstract fun resumeRecorder(): Promise<String>
-  
-  @DoNotStrip
-  @Keep
   abstract fun startPlayer(uri: String?, httpHeaders: Map<String, String>?): Promise<String>
   
   @DoNotStrip
@@ -127,10 +119,6 @@ abstract class HybridSoundSpec: HybridObject() {
   @DoNotStrip
   @Keep
   abstract fun setVolume(volume: Double): Promise<String>
-  
-  @DoNotStrip
-  @Keep
-  abstract fun setPlaybackSpeed(playbackSpeed: Double): Promise<String>
   
   @DoNotStrip
   @Keep
@@ -158,10 +146,6 @@ abstract class HybridSoundSpec: HybridObject() {
   
   @DoNotStrip
   @Keep
-  abstract fun restartEngine(): Promise<Unit>
-  
-  @DoNotStrip
-  @Keep
   abstract fun crossfadeTo(uri: String, duration: Double?, targetVolume: Double?): Promise<String>
   
   @DoNotStrip
@@ -175,23 +159,6 @@ abstract class HybridSoundSpec: HybridObject() {
   @DoNotStrip
   @Keep
   abstract fun stopAmbientLoop(fadeDuration: Double?): Promise<Unit>
-  
-  @DoNotStrip
-  @Keep
-  abstract fun setSubscriptionDuration(sec: Double): Unit
-  
-  abstract fun addRecordBackListener(callback: (recordingMeta: RecordBackType) -> Unit): Unit
-  
-  @DoNotStrip
-  @Keep
-  private fun addRecordBackListener_cxx(callback: Func_void_RecordBackType): Unit {
-    val __result = addRecordBackListener(callback)
-    return __result
-  }
-  
-  @DoNotStrip
-  @Keep
-  abstract fun removeRecordBackListener(): Unit
   
   abstract fun addPlayBackListener(callback: (playbackMeta: PlayBackType) -> Unit): Unit
   
@@ -308,10 +275,6 @@ abstract class HybridSoundSpec: HybridObject() {
   
   @DoNotStrip
   @Keep
-  abstract fun getDebugLogPath(): String
-  
-  @DoNotStrip
-  @Keep
   abstract fun getAllDebugLogPaths(): Array<String>
   
   @DoNotStrip
@@ -341,10 +304,6 @@ abstract class HybridSoundSpec: HybridObject() {
   @DoNotStrip
   @Keep
   abstract fun transcribeAudioFile(filePath: String): Promise<String>
-  
-  @DoNotStrip
-  @Keep
-  abstract fun testMethod(input: String): Promise<String>
 
   private external fun initHybrid(): HybridData
 

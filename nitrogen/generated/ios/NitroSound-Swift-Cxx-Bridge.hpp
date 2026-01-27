@@ -14,8 +14,6 @@ namespace margelo::nitro::sound { class HybridSoundSpec; }
 namespace margelo::nitro::sound { struct PlayBackType; }
 // Forward declaration of `PlaybackEndType` to properly resolve imports.
 namespace margelo::nitro::sound { struct PlaybackEndType; }
-// Forward declaration of `RecordBackType` to properly resolve imports.
-namespace margelo::nitro::sound { struct RecordBackType; }
 // Forward declaration of `RecordingMode` to properly resolve imports.
 namespace margelo::nitro::sound { enum class RecordingMode; }
 
@@ -27,7 +25,6 @@ namespace NitroSound { class HybridSoundSpec_cxx; }
 #include "HybridSoundSpec.hpp"
 #include "PlayBackType.hpp"
 #include "PlaybackEndType.hpp"
-#include "RecordBackType.hpp"
 #include "RecordingMode.hpp"
 #include <NitroModules/Promise.hpp>
 #include <NitroModules/PromiseHolder.hpp>
@@ -323,28 +320,6 @@ namespace margelo::nitro::sound::bridge::swift {
     return *optional;
   }
   
-  // pragma MARK: std::function<void(const RecordBackType& /* recordingMeta */)>
-  /**
-   * Specialized version of `std::function<void(const RecordBackType&)>`.
-   */
-  using Func_void_RecordBackType = std::function<void(const RecordBackType& /* recordingMeta */)>;
-  /**
-   * Wrapper class for a `std::function<void(const RecordBackType& / * recordingMeta * /)>`, this can be used from Swift.
-   */
-  class Func_void_RecordBackType_Wrapper final {
-  public:
-    explicit Func_void_RecordBackType_Wrapper(std::function<void(const RecordBackType& /* recordingMeta */)>&& func): _function(std::make_unique<std::function<void(const RecordBackType& /* recordingMeta */)>>(std::move(func))) {}
-    inline void call(RecordBackType recordingMeta) const noexcept {
-      _function->operator()(recordingMeta);
-    }
-  private:
-    std::unique_ptr<std::function<void(const RecordBackType& /* recordingMeta */)>> _function;
-  } SWIFT_NONCOPYABLE;
-  Func_void_RecordBackType create_Func_void_RecordBackType(void* _Nonnull swiftClosureWrapper) noexcept;
-  inline Func_void_RecordBackType_Wrapper wrap_Func_void_RecordBackType(Func_void_RecordBackType value) noexcept {
-    return Func_void_RecordBackType_Wrapper(std::move(value));
-  }
-  
   // pragma MARK: std::function<void(const PlayBackType& /* playbackMeta */)>
   /**
    * Specialized version of `std::function<void(const PlayBackType&)>`.
@@ -497,15 +472,6 @@ namespace margelo::nitro::sound::bridge::swift {
     return Result<void>::withError(error);
   }
   
-  // pragma MARK: Result<std::string>
-  using Result_std__string_ = Result<std::string>;
-  inline Result_std__string_ create_Result_std__string_(const std::string& value) noexcept {
-    return Result<std::string>::withValue(value);
-  }
-  inline Result_std__string_ create_Result_std__string_(const std::exception_ptr& error) noexcept {
-    return Result<std::string>::withError(error);
-  }
-  
   // pragma MARK: Result<std::vector<std::string>>
   using Result_std__vector_std__string__ = Result<std::vector<std::string>>;
   inline Result_std__vector_std__string__ create_Result_std__vector_std__string__(const std::vector<std::string>& value) noexcept {
@@ -513,6 +479,15 @@ namespace margelo::nitro::sound::bridge::swift {
   }
   inline Result_std__vector_std__string__ create_Result_std__vector_std__string__(const std::exception_ptr& error) noexcept {
     return Result<std::vector<std::string>>::withError(error);
+  }
+  
+  // pragma MARK: Result<std::string>
+  using Result_std__string_ = Result<std::string>;
+  inline Result_std__string_ create_Result_std__string_(const std::string& value) noexcept {
+    return Result<std::string>::withValue(value);
+  }
+  inline Result_std__string_ create_Result_std__string_(const std::exception_ptr& error) noexcept {
+    return Result<std::string>::withError(error);
   }
 
 } // namespace margelo::nitro::sound::bridge::swift

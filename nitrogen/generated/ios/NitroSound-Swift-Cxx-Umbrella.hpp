@@ -14,8 +14,6 @@ namespace margelo::nitro::sound { class HybridSoundSpec; }
 namespace margelo::nitro::sound { struct PlayBackType; }
 // Forward declaration of `PlaybackEndType` to properly resolve imports.
 namespace margelo::nitro::sound { struct PlaybackEndType; }
-// Forward declaration of `RecordBackType` to properly resolve imports.
-namespace margelo::nitro::sound { struct RecordBackType; }
 // Forward declaration of `RecordingMode` to properly resolve imports.
 namespace margelo::nitro::sound { enum class RecordingMode; }
 
@@ -23,7 +21,6 @@ namespace margelo::nitro::sound { enum class RecordingMode; }
 #include "HybridSoundSpec.hpp"
 #include "PlayBackType.hpp"
 #include "PlaybackEndType.hpp"
-#include "RecordBackType.hpp"
 #include "RecordingMode.hpp"
 #include <NitroModules/Promise.hpp>
 #include <NitroModules/Result.hpp>

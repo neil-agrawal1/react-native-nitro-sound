@@ -9,8 +9,6 @@
 
 // Forward declaration of `RecordingMode` to properly resolve imports.
 namespace margelo::nitro::sound { enum class RecordingMode; }
-// Forward declaration of `RecordBackType` to properly resolve imports.
-namespace margelo::nitro::sound { struct RecordBackType; }
 // Forward declaration of `PlayBackType` to properly resolve imports.
 namespace margelo::nitro::sound { struct PlayBackType; }
 // Forward declaration of `PlaybackEndType` to properly resolve imports.
@@ -24,11 +22,8 @@ namespace margelo::nitro::sound { struct PlaybackEndType; }
 #include <vector>
 #include <optional>
 #include <unordered_map>
-#include "RecordBackType.hpp"
-#include <functional>
-#include "JFunc_void_RecordBackType.hpp"
-#include "JRecordBackType.hpp"
 #include "PlayBackType.hpp"
+#include <functional>
 #include "JFunc_void_PlayBackType.hpp"
 #include "JPlayBackType.hpp"
 #include "PlaybackEndType.hpp"
@@ -266,38 +261,6 @@ namespace margelo::nitro::sound {
       return __promise;
     }();
   }
-  std::shared_ptr<Promise<std::string>> JHybridSoundSpec::pauseRecorder() {
-    static const auto method = javaClassStatic()->getMethod<jni::local_ref<JPromise::javaobject>()>("pauseRecorder");
-    auto __result = method(_javaPart);
-    return [&]() {
-      auto __promise = Promise<std::string>::create();
-      __result->cthis()->addOnResolvedListener([=](const jni::alias_ref<jni::JObject>& __boxedResult) {
-        auto __result = jni::static_ref_cast<jni::JString>(__boxedResult);
-        __promise->resolve(__result->toStdString());
-      });
-      __result->cthis()->addOnRejectedListener([=](const jni::alias_ref<jni::JThrowable>& __throwable) {
-        jni::JniException __jniError(__throwable);
-        __promise->reject(std::make_exception_ptr(__jniError));
-      });
-      return __promise;
-    }();
-  }
-  std::shared_ptr<Promise<std::string>> JHybridSoundSpec::resumeRecorder() {
-    static const auto method = javaClassStatic()->getMethod<jni::local_ref<JPromise::javaobject>()>("resumeRecorder");
-    auto __result = method(_javaPart);
-    return [&]() {
-      auto __promise = Promise<std::string>::create();
-      __result->cthis()->addOnResolvedListener([=](const jni::alias_ref<jni::JObject>& __boxedResult) {
-        auto __result = jni::static_ref_cast<jni::JString>(__boxedResult);
-        __promise->resolve(__result->toStdString());
-      });
-      __result->cthis()->addOnRejectedListener([=](const jni::alias_ref<jni::JThrowable>& __throwable) {
-        jni::JniException __jniError(__throwable);
-        __promise->reject(std::make_exception_ptr(__jniError));
-      });
-      return __promise;
-    }();
-  }
   std::shared_ptr<Promise<std::string>> JHybridSoundSpec::startPlayer(const std::optional<std::string>& uri, const std::optional<std::unordered_map<std::string, std::string>>& httpHeaders) {
     static const auto method = javaClassStatic()->getMethod<jni::local_ref<JPromise::javaobject>(jni::alias_ref<jni::JString> /* uri */, jni::alias_ref<jni::JMap<jni::JString, jni::JString>> /* httpHeaders */)>("startPlayer");
     auto __result = method(_javaPart, uri.has_value() ? jni::make_jstring(uri.value()) : nullptr, httpHeaders.has_value() ? [&]() -> jni::local_ref<jni::JMap<jni::JString, jni::JString>> {
@@ -387,22 +350,6 @@ namespace margelo::nitro::sound {
   std::shared_ptr<Promise<std::string>> JHybridSoundSpec::setVolume(double volume) {
     static const auto method = javaClassStatic()->getMethod<jni::local_ref<JPromise::javaobject>(double /* volume */)>("setVolume");
     auto __result = method(_javaPart, volume);
-    return [&]() {
-      auto __promise = Promise<std::string>::create();
-      __result->cthis()->addOnResolvedListener([=](const jni::alias_ref<jni::JObject>& __boxedResult) {
-        auto __result = jni::static_ref_cast<jni::JString>(__boxedResult);
-        __promise->resolve(__result->toStdString());
-      });
-      __result->cthis()->addOnRejectedListener([=](const jni::alias_ref<jni::JThrowable>& __throwable) {
-        jni::JniException __jniError(__throwable);
-        __promise->reject(std::make_exception_ptr(__jniError));
-      });
-      return __promise;
-    }();
-  }
-  std::shared_ptr<Promise<std::string>> JHybridSoundSpec::setPlaybackSpeed(double playbackSpeed) {
-    static const auto method = javaClassStatic()->getMethod<jni::local_ref<JPromise::javaobject>(double /* playbackSpeed */)>("setPlaybackSpeed");
-    auto __result = method(_javaPart, playbackSpeed);
     return [&]() {
       auto __promise = Promise<std::string>::create();
       __result->cthis()->addOnResolvedListener([=](const jni::alias_ref<jni::JObject>& __boxedResult) {
@@ -509,21 +456,6 @@ namespace margelo::nitro::sound {
       return __promise;
     }();
   }
-  std::shared_ptr<Promise<void>> JHybridSoundSpec::restartEngine() {
-    static const auto method = javaClassStatic()->getMethod<jni::local_ref<JPromise::javaobject>()>("restartEngine");
-    auto __result = method(_javaPart);
-    return [&]() {
-      auto __promise = Promise<void>::create();
-      __result->cthis()->addOnResolvedListener([=](const jni::alias_ref<jni::JObject>& /* unit */) {
-        __promise->resolve();
-      });
-      __result->cthis()->addOnRejectedListener([=](const jni::alias_ref<jni::JThrowable>& __throwable) {
-        jni::JniException __jniError(__throwable);
-        __promise->reject(std::make_exception_ptr(__jniError));
-      });
-      return __promise;
-    }();
-  }
   std::shared_ptr<Promise<std::string>> JHybridSoundSpec::crossfadeTo(const std::string& uri, std::optional<double> duration, std::optional<double> targetVolume) {
     static const auto method = javaClassStatic()->getMethod<jni::local_ref<JPromise::javaobject>(jni::alias_ref<jni::JString> /* uri */, jni::alias_ref<jni::JDouble> /* duration */, jni::alias_ref<jni::JDouble> /* targetVolume */)>("crossfadeTo");
     auto __result = method(_javaPart, jni::make_jstring(uri), duration.has_value() ? jni::JDouble::valueOf(duration.value()) : nullptr, targetVolume.has_value() ? jni::JDouble::valueOf(targetVolume.value()) : nullptr);
@@ -584,18 +516,6 @@ namespace margelo::nitro::sound {
       });
       return __promise;
     }();
-  }
-  void JHybridSoundSpec::setSubscriptionDuration(double sec) {
-    static const auto method = javaClassStatic()->getMethod<void(double /* sec */)>("setSubscriptionDuration");
-    method(_javaPart, sec);
-  }
-  void JHybridSoundSpec::addRecordBackListener(const std::function<void(const RecordBackType& /* recordingMeta */)>& callback) {
-    static const auto method = javaClassStatic()->getMethod<void(jni::alias_ref<JFunc_void_RecordBackType::javaobject> /* callback */)>("addRecordBackListener_cxx");
-    method(_javaPart, JFunc_void_RecordBackType_cxx::fromCpp(callback));
-  }
-  void JHybridSoundSpec::removeRecordBackListener() {
-    static const auto method = javaClassStatic()->getMethod<void()>("removeRecordBackListener");
-    method(_javaPart);
   }
   void JHybridSoundSpec::addPlayBackListener(const std::function<void(const PlayBackType& /* playbackMeta */)>& callback) {
     static const auto method = javaClassStatic()->getMethod<void(jni::alias_ref<JFunc_void_PlayBackType::javaobject> /* callback */)>("addPlayBackListener_cxx");
@@ -676,11 +596,6 @@ namespace margelo::nitro::sound {
     static const auto method = javaClassStatic()->getMethod<void(jni::alias_ref<jni::JString> /* message */)>("writeDebugLog");
     method(_javaPart, jni::make_jstring(message));
   }
-  std::string JHybridSoundSpec::getDebugLogPath() {
-    static const auto method = javaClassStatic()->getMethod<jni::local_ref<jni::JString>()>("getDebugLogPath");
-    auto __result = method(_javaPart);
-    return __result->toStdString();
-  }
   std::vector<std::string> JHybridSoundSpec::getAllDebugLogPaths() {
     static const auto method = javaClassStatic()->getMethod<jni::local_ref<jni::JArrayClass<jni::JString>>()>("getAllDebugLogPaths");
     auto __result = method(_javaPart);
@@ -736,22 +651,6 @@ namespace margelo::nitro::sound {
   std::shared_ptr<Promise<std::string>> JHybridSoundSpec::transcribeAudioFile(const std::string& filePath) {
     static const auto method = javaClassStatic()->getMethod<jni::local_ref<JPromise::javaobject>(jni::alias_ref<jni::JString> /* filePath */)>("transcribeAudioFile");
     auto __result = method(_javaPart, jni::make_jstring(filePath));
-    return [&]() {
-      auto __promise = Promise<std::string>::create();
-      __result->cthis()->addOnResolvedListener([=](const jni::alias_ref<jni::JObject>& __boxedResult) {
-        auto __result = jni::static_ref_cast<jni::JString>(__boxedResult);
-        __promise->resolve(__result->toStdString());
-      });
-      __result->cthis()->addOnRejectedListener([=](const jni::alias_ref<jni::JThrowable>& __throwable) {
-        jni::JniException __jniError(__throwable);
-        __promise->reject(std::make_exception_ptr(__jniError));
-      });
-      return __promise;
-    }();
-  }
-  std::shared_ptr<Promise<std::string>> JHybridSoundSpec::testMethod(const std::string& input) {
-    static const auto method = javaClassStatic()->getMethod<jni::local_ref<JPromise::javaobject>(jni::alias_ref<jni::JString> /* input */)>("testMethod");
-    auto __result = method(_javaPart, jni::make_jstring(input));
     return [&]() {
       auto __promise = Promise<std::string>::create();
       __result->cthis()->addOnResolvedListener([=](const jni::alias_ref<jni::JObject>& __boxedResult) {

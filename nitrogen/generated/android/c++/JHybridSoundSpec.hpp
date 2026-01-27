@@ -67,29 +67,22 @@ namespace margelo::nitro::sound {
     std::shared_ptr<Promise<void>> startManualSegment(std::optional<double> silenceTimeoutSeconds) override;
     std::shared_ptr<Promise<void>> stopManualSegment() override;
     std::shared_ptr<Promise<void>> setVADThreshold(double threshold) override;
-    std::shared_ptr<Promise<std::string>> pauseRecorder() override;
-    std::shared_ptr<Promise<std::string>> resumeRecorder() override;
     std::shared_ptr<Promise<std::string>> startPlayer(const std::optional<std::string>& uri, const std::optional<std::unordered_map<std::string, std::string>>& httpHeaders) override;
     std::shared_ptr<Promise<std::string>> stopPlayer() override;
     std::shared_ptr<Promise<std::string>> pausePlayer() override;
     std::shared_ptr<Promise<std::string>> resumePlayer() override;
     std::shared_ptr<Promise<std::string>> seekToPlayer(double time) override;
     std::shared_ptr<Promise<std::string>> setVolume(double volume) override;
-    std::shared_ptr<Promise<std::string>> setPlaybackSpeed(double playbackSpeed) override;
     std::shared_ptr<Promise<void>> updateNowPlaying(const std::string& title, const std::string& artist, double duration, double currentTime) override;
     std::shared_ptr<Promise<void>> clearNowPlaying() override;
     std::shared_ptr<Promise<void>> setNowPlayingArtwork(const std::string& imagePath) override;
     std::shared_ptr<Promise<double>> getCurrentPosition() override;
     std::shared_ptr<Promise<double>> getDuration() override;
     std::shared_ptr<Promise<std::string>> setLoopEnabled(bool enabled) override;
-    std::shared_ptr<Promise<void>> restartEngine() override;
     std::shared_ptr<Promise<std::string>> crossfadeTo(const std::string& uri, std::optional<double> duration, std::optional<double> targetVolume) override;
     std::shared_ptr<Promise<void>> fadeVolumeTo(double targetVolume, double duration) override;
     std::shared_ptr<Promise<void>> startAmbientLoop(const std::string& uri, double volume, std::optional<double> fadeDuration) override;
     std::shared_ptr<Promise<void>> stopAmbientLoop(std::optional<double> fadeDuration) override;
-    void setSubscriptionDuration(double sec) override;
-    void addRecordBackListener(const std::function<void(const RecordBackType& /* recordingMeta */)>& callback) override;
-    void removeRecordBackListener() override;
     void addPlayBackListener(const std::function<void(const PlayBackType& /* playbackMeta */)>& callback) override;
     void removePlayBackListener() override;
     void addPlaybackEndListener(const std::function<void(const PlaybackEndType& /* playbackEndMeta */)>& callback) override;
@@ -107,7 +100,6 @@ namespace margelo::nitro::sound {
     void removePlayCallback() override;
     std::shared_ptr<Promise<void>> teardownRemoteCommands() override;
     void writeDebugLog(const std::string& message) override;
-    std::string getDebugLogPath() override;
     std::vector<std::string> getAllDebugLogPaths() override;
     std::string readDebugLog(const std::optional<std::string>& path) override;
     std::shared_ptr<Promise<void>> clearDebugLogs() override;
@@ -116,7 +108,6 @@ namespace margelo::nitro::sound {
     std::string mmss(double secs) override;
     std::string mmssss(double milisecs) override;
     std::shared_ptr<Promise<std::string>> transcribeAudioFile(const std::string& filePath) override;
-    std::shared_ptr<Promise<std::string>> testMethod(const std::string& input) override;
 
   private:
     friend HybridBase;

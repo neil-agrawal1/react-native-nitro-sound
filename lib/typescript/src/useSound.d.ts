@@ -1,10 +1,6 @@
-import type { Sound as SoundType, PlayBackType, RecordBackType } from './specs/Sound.nitro';
+import type { Sound as SoundType, PlayBackType } from './specs/Sound.nitro';
 export type UseSoundOptions = {
-    subscriptionDuration?: number;
     autoDispose?: boolean;
-    onRecord?: (e: RecordBackType & {
-        ended?: boolean;
-    }) => void;
     onPlayback?: (e: PlayBackType & {
         ended?: boolean;
     }) => void;
@@ -23,8 +19,6 @@ export type UseSound = {
     sound: SoundType;
     state: UseSoundState;
     startRecorder: SoundType['startRecorder'];
-    pauseRecorder: SoundType['pauseRecorder'];
-    resumeRecorder: SoundType['resumeRecorder'];
     stopRecorder: SoundType['stopRecorder'];
     startPlayer: SoundType['startPlayer'];
     pausePlayer: SoundType['pausePlayer'];
@@ -32,9 +26,6 @@ export type UseSound = {
     stopPlayer: SoundType['stopPlayer'];
     seekToPlayer: SoundType['seekToPlayer'];
     setVolume: SoundType['setVolume'];
-    setPlaybackSpeed: SoundType['setPlaybackSpeed'];
-    mmss: SoundType['mmss'];
-    mmssss: SoundType['mmssss'];
     dispose: () => void;
 };
 export declare function useSound(options?: UseSoundOptions): UseSound;

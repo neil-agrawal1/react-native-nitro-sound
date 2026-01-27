@@ -34,12 +34,6 @@ export declare enum AudioEncoderAndroidType {
     AAC_ELD = 5,
     VORBIS = 6
 }
-export interface RecordBackType {
-    isRecording?: boolean;
-    currentPosition: number;
-    currentMetering?: number;
-    recordSecs?: number;
-}
 export interface PlayBackType {
     isMuted?: boolean;
     duration: number;
@@ -49,7 +43,6 @@ export interface PlaybackEndType {
     duration: number;
     currentPosition: number;
 }
-export type RecordBackListener = (recordingMeta: RecordBackType) => void;
 export type PlayBackListener = (playbackMeta: PlayBackType) => void;
 export type PlaybackEndListener = (playbackEndMeta: PlaybackEndType) => void;
 export type RecordingMode = 'idle' | 'manual' | 'vad';
@@ -119,15 +112,12 @@ export interface Sound extends HybridObject<{
     startManualSegment(silenceTimeoutSeconds?: number): Promise<void>;
     stopManualSegment(): Promise<void>;
     setVADThreshold(threshold: number): Promise<void>;
-    pauseRecorder(): Promise<string>;
-    resumeRecorder(): Promise<string>;
     startPlayer(uri?: string, httpHeaders?: Record<string, string>): Promise<string>;
     stopPlayer(): Promise<string>;
     pausePlayer(): Promise<string>;
     resumePlayer(): Promise<string>;
     seekToPlayer(time: number): Promise<string>;
     setVolume(volume: number): Promise<string>;
-    setPlaybackSpeed(playbackSpeed: number): Promise<string>;
     /**
      * Update Now Playing info on lock screen
      * @param title Track title to display
@@ -148,14 +138,10 @@ export interface Sound extends HybridObject<{
     getCurrentPosition(): Promise<number>;
     getDuration(): Promise<number>;
     setLoopEnabled(enabled: boolean): Promise<string>;
-    restartEngine(): Promise<void>;
     crossfadeTo(uri: string, duration?: number, targetVolume?: number): Promise<string>;
     fadeVolumeTo(targetVolume: number, duration: number): Promise<void>;
     startAmbientLoop(uri: string, volume: number, fadeDuration?: number): Promise<void>;
     stopAmbientLoop(fadeDuration?: number): Promise<void>;
-    setSubscriptionDuration(sec: number): void;
-    addRecordBackListener(callback: (recordingMeta: RecordBackType) => void): void;
-    removeRecordBackListener(): void;
     addPlayBackListener(callback: (playbackMeta: PlayBackType) => void): void;
     removePlayBackListener(): void;
     addPlaybackEndListener(callback: (playbackEndMeta: PlaybackEndType) => void): void;
@@ -178,7 +164,6 @@ export interface Sound extends HybridObject<{
      */
     teardownRemoteCommands(): Promise<void>;
     writeDebugLog(message: string): void;
-    getDebugLogPath(): string;
     getAllDebugLogPaths(): string[];
     readDebugLog(path?: string): string;
     clearDebugLogs(): Promise<void>;
@@ -198,11 +183,5 @@ export interface Sound extends HybridObject<{
      * @throws Error if file not found or speech recognition unavailable
      */
     transcribeAudioFile(filePath: string): Promise<string>;
-    /**
-     * Simple test method to verify native bridge is working
-     * @param input Any string to echo back
-     * @returns Promise resolving to "Native received: {input}"
-     */
-    testMethod(input: string): Promise<string>;
 }
 //# sourceMappingURL=Sound.nitro.d.ts.map

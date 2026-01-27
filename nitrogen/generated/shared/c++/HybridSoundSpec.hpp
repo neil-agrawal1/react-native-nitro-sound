@@ -15,8 +15,6 @@
 
 // Forward declaration of `RecordingMode` to properly resolve imports.
 namespace margelo::nitro::sound { enum class RecordingMode; }
-// Forward declaration of `RecordBackType` to properly resolve imports.
-namespace margelo::nitro::sound { struct RecordBackType; }
 // Forward declaration of `PlayBackType` to properly resolve imports.
 namespace margelo::nitro::sound { struct PlayBackType; }
 // Forward declaration of `PlaybackEndType` to properly resolve imports.
@@ -27,9 +25,8 @@ namespace margelo::nitro::sound { struct PlaybackEndType; }
 #include <optional>
 #include <string>
 #include <unordered_map>
-#include "RecordBackType.hpp"
-#include <functional>
 #include "PlayBackType.hpp"
+#include <functional>
 #include "PlaybackEndType.hpp"
 #include <vector>
 
@@ -78,29 +75,22 @@ namespace margelo::nitro::sound {
       virtual std::shared_ptr<Promise<void>> startManualSegment(std::optional<double> silenceTimeoutSeconds) = 0;
       virtual std::shared_ptr<Promise<void>> stopManualSegment() = 0;
       virtual std::shared_ptr<Promise<void>> setVADThreshold(double threshold) = 0;
-      virtual std::shared_ptr<Promise<std::string>> pauseRecorder() = 0;
-      virtual std::shared_ptr<Promise<std::string>> resumeRecorder() = 0;
       virtual std::shared_ptr<Promise<std::string>> startPlayer(const std::optional<std::string>& uri, const std::optional<std::unordered_map<std::string, std::string>>& httpHeaders) = 0;
       virtual std::shared_ptr<Promise<std::string>> stopPlayer() = 0;
       virtual std::shared_ptr<Promise<std::string>> pausePlayer() = 0;
       virtual std::shared_ptr<Promise<std::string>> resumePlayer() = 0;
       virtual std::shared_ptr<Promise<std::string>> seekToPlayer(double time) = 0;
       virtual std::shared_ptr<Promise<std::string>> setVolume(double volume) = 0;
-      virtual std::shared_ptr<Promise<std::string>> setPlaybackSpeed(double playbackSpeed) = 0;
       virtual std::shared_ptr<Promise<void>> updateNowPlaying(const std::string& title, const std::string& artist, double duration, double currentTime) = 0;
       virtual std::shared_ptr<Promise<void>> clearNowPlaying() = 0;
       virtual std::shared_ptr<Promise<void>> setNowPlayingArtwork(const std::string& imagePath) = 0;
       virtual std::shared_ptr<Promise<double>> getCurrentPosition() = 0;
       virtual std::shared_ptr<Promise<double>> getDuration() = 0;
       virtual std::shared_ptr<Promise<std::string>> setLoopEnabled(bool enabled) = 0;
-      virtual std::shared_ptr<Promise<void>> restartEngine() = 0;
       virtual std::shared_ptr<Promise<std::string>> crossfadeTo(const std::string& uri, std::optional<double> duration, std::optional<double> targetVolume) = 0;
       virtual std::shared_ptr<Promise<void>> fadeVolumeTo(double targetVolume, double duration) = 0;
       virtual std::shared_ptr<Promise<void>> startAmbientLoop(const std::string& uri, double volume, std::optional<double> fadeDuration) = 0;
       virtual std::shared_ptr<Promise<void>> stopAmbientLoop(std::optional<double> fadeDuration) = 0;
-      virtual void setSubscriptionDuration(double sec) = 0;
-      virtual void addRecordBackListener(const std::function<void(const RecordBackType& /* recordingMeta */)>& callback) = 0;
-      virtual void removeRecordBackListener() = 0;
       virtual void addPlayBackListener(const std::function<void(const PlayBackType& /* playbackMeta */)>& callback) = 0;
       virtual void removePlayBackListener() = 0;
       virtual void addPlaybackEndListener(const std::function<void(const PlaybackEndType& /* playbackEndMeta */)>& callback) = 0;
@@ -118,7 +108,6 @@ namespace margelo::nitro::sound {
       virtual void removePlayCallback() = 0;
       virtual std::shared_ptr<Promise<void>> teardownRemoteCommands() = 0;
       virtual void writeDebugLog(const std::string& message) = 0;
-      virtual std::string getDebugLogPath() = 0;
       virtual std::vector<std::string> getAllDebugLogPaths() = 0;
       virtual std::string readDebugLog(const std::optional<std::string>& path) = 0;
       virtual std::shared_ptr<Promise<void>> clearDebugLogs() = 0;
@@ -127,7 +116,6 @@ namespace margelo::nitro::sound {
       virtual std::string mmss(double secs) = 0;
       virtual std::string mmssss(double milisecs) = 0;
       virtual std::shared_ptr<Promise<std::string>> transcribeAudioFile(const std::string& filePath) = 0;
-      virtual std::shared_ptr<Promise<std::string>> testMethod(const std::string& input) = 0;
 
     protected:
       // Hybrid Setup
