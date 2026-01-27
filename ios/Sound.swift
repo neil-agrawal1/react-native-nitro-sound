@@ -436,7 +436,18 @@ import MediaPlayer
         // can cause format errors (2003329396) because hardware isn't accessible.
         let audioSession = AVAudioSession.sharedInstance()
 
-        // Step 1: Reactivate the audio session (tell iOS we want audio access again)
+        // Step 1: Re-apply mixable .playAndRecord category (iOS may clear options after interruption).
+        // Background reactivation fails with 560557684 (CannotInterruptOthers) if category is not mixable.
+        do {
+            try audioSession.setCategory(.playAndRecord,
+                                        mode: .default,
+                                        options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP, .mixWithOthers])
+        } catch {
+            let nsError = error as NSError
+            bridgedLog("⚠️ Re-apply setCategory failed: \(error.localizedDescription) (code: \(nsError.code)) - continuing anyway")
+        }
+
+        // Step 2: Reactivate the audio session (tell iOS we want audio access again)
         // NOTE: In background with locked device, this might fail if iOS has suspended the app.
         // That's OK - the next audio operation (alarm, silent loop) will fully reinitialize.
         do {
@@ -446,7 +457,7 @@ import MediaPlayer
             bridgedLog("⚠️ Failed to reactivate audio session: \(error.localizedDescription) (code: \(nsError.code)) - continuing anyway")
         }
 
-        // Step 2: Restart the audio engine (start audio processing)
+        // Step 3: Restart the audio engine (start audio processing)
         if !engine.isRunning {
             do {
                 try engine.start()
@@ -503,7 +514,7 @@ import MediaPlayer
 
         try audioSession.setCategory(.playAndRecord,
                                     mode: .default,
-                                    options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP])
+                                    options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP, .mixWithOthers])
         try audioSession.setPreferredSampleRate(44100)
         if audioSession.maximumInputNumberOfChannels >= 1 {
             try? audioSession.setPreferredInputNumberOfChannels(1)
