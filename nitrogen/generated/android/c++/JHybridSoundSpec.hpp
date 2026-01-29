@@ -55,6 +55,8 @@ namespace margelo::nitro::sound {
     // Methods
     std::shared_ptr<Promise<void>> startRecorder() override;
     std::shared_ptr<Promise<void>> stopRecorder() override;
+    std::shared_ptr<Promise<void>> installTap() override;
+    std::shared_ptr<Promise<void>> removeTap() override;
     std::shared_ptr<Promise<void>> endEngineSession() override;
     std::shared_ptr<Promise<void>> setVADMode() override;
     std::shared_ptr<Promise<void>> setManualMode() override;
