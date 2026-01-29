@@ -460,7 +460,7 @@ final class HybridSound: HybridSoundSpec_base, HybridSoundSpec_protocol, SNResul
                 // Optimize: If permission already granted, skip async callback
                 if currentPermission == .granted {
                     DispatchQueue.global(qos: .userInitiated).async {
-                        self.setupRecording(promise: promise)
+                        self.installTap(promise: promise)
                     }
                 } else {
                     audioSession.requestRecordPermission { [weak self] allowed in
@@ -468,7 +468,7 @@ final class HybridSound: HybridSoundSpec_base, HybridSoundSpec_protocol, SNResul
 
                         if allowed {
                             DispatchQueue.global(qos: .userInitiated).async {
-                                self.setupRecording(promise: promise)
+                                self.installTap(promise: promise)
                             }
                         } else {
                             self.bridgedLog("❌ RECORDING: Microphone permission denied")
@@ -486,11 +486,11 @@ final class HybridSound: HybridSoundSpec_base, HybridSoundSpec_protocol, SNResul
         return promise
     }
 
-    private func setupRecording(promise: Promise<Void>) {
+    private func installTap(promise: Promise<Void>) {
         do {
             guard let engine = self.audioEngine else {
-                bridgedLog("❌ setupRecording: Audio engine is nil")
-                promise.reject(withError: RuntimeError.error(withMessage: "Unified audio engine not initialized"))
+                bridgedLog("❌ installTap: Audio engine is nil")
+                promise.reject(withError: RuntimeError.error(withMessage: "Audio engine not initialized"))
                 return
             }
 
@@ -498,23 +498,16 @@ final class HybridSound: HybridSoundSpec_base, HybridSoundSpec_protocol, SNResul
                 throw RuntimeError.error(withMessage: "Audio engine is not running")
             }
 
-            // Initialize session timestamp for unique filenames (milliseconds since epoch)
-            self.sessionTimestamp = Int64(Date().timeIntervalSince1970 * 1000)
-            self.segmentCounter = 0
-
             let inputNode = engine.inputNode
             let hwFormat = inputNode.outputFormat(forBus: 0)
 
             // Remove any existing taps
             inputNode.removeTap(onBus: 0)
 
-            // Set mode to idle
-            self.currentMode = .idle
-
             // Set default output directory if needed
             if outputDirectory == nil {
                 let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-                outputDirectory = documentsURL.appendingPathComponent("speech_segments")
+                outputDirectory = documentsURL.appendingPathComponent("recordings")
             }
             if let outputDir = outputDirectory {
                 try FileManager.default.createDirectory(at: outputDir, withIntermediateDirectories: true)
@@ -526,33 +519,30 @@ final class HybridSound: HybridSoundSpec_base, HybridSoundSpec_protocol, SNResul
             }
             spscBuffer?.reset()
 
-            // Store input format for worker resampling
+            // Store input format for file writing
             self.workerInputFormat = hwFormat
 
             // Reset tap frame counter for logging
             self.tapFrameCounter = 0
 
-            // Install tap using HARDWARE format - RT-SAFE: copy-only, no processing
-            // All conversion, VAD, and file writing happens on the worker queue
+            // Install tap - RT-SAFE: copy-only, no processing
             inputNode.installTap(onBus: 0, bufferSize: 1024, format: hwFormat) { [weak self] buffer, time in
                 guard let self = self, let spsc = self.spscBuffer else { return }
-                // RT-SAFE: Lock-free memcpy to SPSC ring buffer
-                // Returns false on overflow (worker fell behind) - we drop the buffer gracefully
                 _ = spsc.write(buffer)
 
-                // Log every ~1 second (47 buffers at 48kHz with 1024 samples)
+                // Log every ~1 second
                 self.tapFrameCounter += 1
                 if self.tapFrameCounter % 47 == 1 {
                     self.bridgedLog("🎤 Tap buffer #\(self.tapFrameCounter) | frames: \(buffer.frameLength)")
                 }
             }
 
-            self.bridgedLog("🎙️🟠 RECORDING TAP INSTALLED - mic indicator should appear now")
+            self.bridgedLog("🎙️🟠 TAP INSTALLED")
             promise.resolve(withResult: ())
 
         } catch {
-            bridgedLog("❌ RECORDING: Setup failed - \(error.localizedDescription)")
-            promise.reject(withError: RuntimeError.error(withMessage: "Recording setup failed: \(error.localizedDescription)"))
+            bridgedLog("❌ installTap failed: \(error.localizedDescription)")
+            promise.reject(withError: RuntimeError.error(withMessage: "Tap installation failed: \(error.localizedDescription)"))
         }
     }
 
