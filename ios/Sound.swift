@@ -206,6 +206,7 @@ final class HybridSound: HybridSoundSpec_base, HybridSoundSpec_protocol, SNResul
         engine.connect(playerC, to: mainMixer, format: nil)
         engine.connect(playerD, to: mainMixer, format: nil)
 
+        // Initialize input node (required for .playAndRecord)
         let _ = engine.inputNode
 
         do {
@@ -504,40 +505,11 @@ final class HybridSound: HybridSoundSpec_base, HybridSoundSpec_protocol, SNResul
             let inputNode = engine.inputNode
             let hwFormat = inputNode.outputFormat(forBus: 0)
 
-            // Create target format for VAD (16kHz mono)
-            guard let target16kHzFormat = AVAudioFormat(
-                commonFormat: .pcmFormatFloat32,
-                sampleRate: 16000,
-                channels: 1,
-                interleaved: false
-            ) else {
-                throw RuntimeError.error(withMessage: "Failed to create 16kHz target format")
-            }
-
-            self.targetFormat = target16kHzFormat
-
-            // Create audio converter from hardware rate → 16kHz
-            guard let converter = AVAudioConverter(from: hwFormat, to: target16kHzFormat) else {
-                throw RuntimeError.error(withMessage: "Failed to create audio converter from \(Int(hwFormat.sampleRate))Hz to 16kHz")
-            }
-            self.audioConverter = converter
-
             // Remove any existing taps
             inputNode.removeTap(onBus: 0)
 
-            // Set mode to idle FIRST (before VAD initialization)
+            // Set mode to idle
             self.currentMode = .idle
-
-            // Initialize VAD components asynchronously (non-blocking)
-            Task {
-                do {
-                    let vadConfig = VadConfig(threshold: self.vadThreshold)
-                    self.vadManager = try await VadManager(config: vadConfig)
-                    self.vadStreamState = VadStreamState.initial()
-                } catch {
-                    self.bridgedLog("⚠️ VAD init failed, using fallback")
-                }
-            }
 
             // Set default output directory if needed
             if outputDirectory == nil {
@@ -746,75 +718,6 @@ final class HybridSound: HybridSoundSpec_base, HybridSoundSpec_protocol, SNResul
 
             self.bridgedLog("✅ endEngineSession() completed")
             promise.resolve(withResult: ())
-        }
-
-        return promise
-    }
-
-    /**
-     * ONLY activate the audio session with .playAndRecord category.
-     * Does NOT create AVAudioEngine or access inputNode.
-     * Use this to test if mic indicator appears from session alone.
-     */
-    public func activateRecordingSession() throws -> Promise<Void> {
-        let promise = Promise<Void>()
-
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self = self else {
-                promise.reject(withError: RuntimeError.error(withMessage: "Self is nil"))
-                return
-            }
-
-            do {
-                let audioSession = AVAudioSession.sharedInstance()
-
-                // Set category to playAndRecord
-                try audioSession.setCategory(.playAndRecord,
-                                            mode: .default,
-                                            options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP, .mixWithOthers])
-
-                // Activate the session
-                try audioSession.setActive(true)
-
-                self.bridgedLog("🔵 AUDIO SESSION ACTIVATED (.playAndRecord) - NO engine created")
-                self.bridgedLog("🧪 Check: Does mic indicator appear with JUST the session?")
-                promise.resolve(withResult: ())
-            } catch {
-                self.bridgedLog("❌ activateRecordingSession() failed: \(error.localizedDescription)")
-                promise.reject(withError: RuntimeError.error(withMessage: "Audio session activation failed: \(error.localizedDescription)"))
-            }
-        }
-
-        return promise
-    }
-
-    /**
-     * Initialize the audio engine WITHOUT installing a recording tap.
-     * This is useful for testing whether the microphone indicator appears
-     * when the engine is started vs when the recording tap is installed.
-     *
-     * The engine will be started with play+record audio session but no
-     * input tap will be added. Use startRecorder() to add the tap later.
-     */
-    public func initializeAudioEngine() throws -> Promise<Void> {
-        let promise = Promise<Void>()
-
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self = self else {
-                promise.reject(withError: RuntimeError.error(withMessage: "Self is nil"))
-                return
-            }
-
-            do {
-                // Call the private initialization method (creates engine, audio session, starts engine)
-                // but does NOT install the recording tap
-                try self.setupAudioEngine()
-                self.bridgedLog("🟢 AUDIO ENGINE STARTED (no tap) - check if mic indicator appears")
-                promise.resolve(withResult: ())
-            } catch {
-                self.bridgedLog("❌ initializeAudioEngine() failed: \(error.localizedDescription)")
-                promise.reject(withError: RuntimeError.error(withMessage: "Audio engine initialization failed: \(error.localizedDescription)"))
-            }
         }
 
         return promise

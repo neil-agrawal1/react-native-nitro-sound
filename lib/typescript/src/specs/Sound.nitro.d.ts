@@ -53,21 +53,6 @@ export interface Sound extends HybridObject<{
     startRecorder(): Promise<void>;
     stopRecorder(): Promise<void>;
     /**
-     * ONLY activate the audio session with .playAndRecord category.
-     * Does NOT create AVAudioEngine or access inputNode.
-     * Use this to test if mic indicator appears from session alone.
-     */
-    activateRecordingSession(): Promise<void>;
-    /**
-     * Initialize the audio engine WITHOUT installing a recording tap.
-     * This is useful for testing whether the microphone indicator appears
-     * when the engine is started vs when the recording tap is installed.
-     *
-     * The engine will be started with play+record audio session but no
-     * input tap will be added. Use startRecorder() to add the tap later.
-     */
-    initializeAudioEngine(): Promise<void>;
-    /**
      * End the engine session and completely destroy all audio resources.
      * This performs a full teardown:
      * - Ends any active recording segments
