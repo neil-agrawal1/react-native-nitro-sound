@@ -1646,135 +1646,6 @@ final class HybridSound: HybridSoundSpec_base, HybridSoundSpec_protocol, SNResul
         bridgedLog("✂️ Trim: \(String(format: "%.1f", originalDuration))s original → removed \(String(format: "%.1f", seconds))s silence → \(String(format: "%.1f", trimmedDuration))s final")
     }
 
-    private func resampleRecording(fileURL: URL) throws {
-        // Read the original 16kHz file
-        let sourceFile = try AVAudioFile(forReading: fileURL)
-        let sourceFormat = sourceFile.processingFormat
-        let sourceSampleRate = sourceFormat.sampleRate
-
-        // Only resample if source is 16kHz (don't resample if already 44.1kHz)
-        guard sourceSampleRate == 16000 else {
-            return
-        }
-
-        // Create 44.1kHz output format
-        guard let outputFormat = AVAudioFormat(
-            commonFormat: .pcmFormatFloat32,
-            sampleRate: 44100,
-            channels: sourceFormat.channelCount,
-            interleaved: false
-        ) else {
-            throw RuntimeError.error(withMessage: "Failed to create 44.1kHz output format")
-        }
-
-        // Create converter
-        guard let converter = AVAudioConverter(from: sourceFormat, to: outputFormat) else {
-            throw RuntimeError.error(withMessage: "Failed to create audio converter for resampling")
-        }
-
-        // Create temporary output file
-        let tempURL = fileURL.deletingLastPathComponent()
-            .appendingPathComponent("temp_resample_\(UUID().uuidString).wav")
-        let outputFile = try AVAudioFile(forWriting: tempURL, settings: outputFormat.settings)
-
-        // Calculate buffer sizes
-        let inputFrameCapacity: AVAudioFrameCount = 8192
-        let sampleRateRatio = outputFormat.sampleRate / sourceFormat.sampleRate
-        let outputFrameCapacity = AVAudioFrameCount(Double(inputFrameCapacity) * sampleRateRatio)
-
-        // Create buffers
-        guard let inputBuffer = AVAudioPCMBuffer(pcmFormat: sourceFormat, frameCapacity: inputFrameCapacity),
-              let outputBuffer = AVAudioPCMBuffer(pcmFormat: outputFormat, frameCapacity: outputFrameCapacity) else {
-            throw RuntimeError.error(withMessage: "Failed to create conversion buffers")
-        }
-
-        var totalFramesConverted: AVAudioFramePosition = 0
-
-        // Convert in chunks
-        while sourceFile.framePosition < sourceFile.length {
-            let framesToRead = min(inputFrameCapacity, AVAudioFrameCount(sourceFile.length - sourceFile.framePosition))
-
-            // Read from source
-            try sourceFile.read(into: inputBuffer, frameCount: framesToRead)
-            inputBuffer.frameLength = framesToRead
-
-            // Track if input is exhausted for this chunk
-            var inputProvided = false
-
-            // Convert to output - the input block may be called multiple times per convert() call
-            var error: NSError?
-            let inputBlock: AVAudioConverterInputBlock = { inNumPackets, outStatus in
-                // Only provide the buffer once per convert() call
-                if !inputProvided {
-                    inputProvided = true
-                    outStatus.pointee = .haveData
-                    return inputBuffer
-                } else {
-                    // Input exhausted for this chunk
-                    outStatus.pointee = .noDataNow
-                    return nil
-                }
-            }
-
-            let status = converter.convert(to: outputBuffer, error: &error, withInputFrom: inputBlock)
-
-            if let error = error {
-                throw RuntimeError.error(withMessage: "Conversion error: \(error.localizedDescription)")
-            }
-
-            guard status != .error else {
-                throw RuntimeError.error(withMessage: "Converter returned error status")
-            }
-
-            // Only write if we got output data
-            if outputBuffer.frameLength > 0 {
-                try outputFile.write(from: outputBuffer)
-                totalFramesConverted += AVAudioFramePosition(outputBuffer.frameLength)
-            }
-        }
-
-        // Flush the converter to get any remaining buffered samples
-        // This is critical when upsampling - the converter buffers samples for interpolation
-        var flushedFrames: AVAudioFramePosition = 0
-        var flushIterations = 0
-        while true {
-            var error: NSError?
-            let inputBlock: AVAudioConverterInputBlock = { inNumPackets, outStatus in
-                // Signal end of stream to flush buffered samples
-                outStatus.pointee = .endOfStream
-                return nil
-            }
-
-            let status = converter.convert(to: outputBuffer, error: &error, withInputFrom: inputBlock)
-
-            if let error = error {
-                bridgedLog("⚠️ Flush error: \(error.localizedDescription)")
-                break
-            }
-
-            // Write any flushed output
-            if outputBuffer.frameLength > 0 {
-                try outputFile.write(from: outputBuffer)
-                totalFramesConverted += AVAudioFramePosition(outputBuffer.frameLength)
-                flushedFrames += AVAudioFramePosition(outputBuffer.frameLength)
-                flushIterations += 1
-            } else {
-                // No more output, flush complete
-                break
-            }
-
-            // Safety check - prevent infinite loop
-            if flushIterations > 10 {
-                bridgedLog("⚠️ Flush safety limit reached")
-                break
-            }
-        }
-
-        // Replace original file with resampled version
-        try FileManager.default.removeItem(at: fileURL)
-        try FileManager.default.moveItem(at: tempURL, to: fileURL)
-
-    }
 
     /// Ends the current segment and returns metadata for later callback
     /// Use this when you need to process the audio file before firing the callback
@@ -1811,12 +1682,7 @@ final class HybridSound: HybridSoundSpec_base, HybridSoundSpec_protocol, SNResul
             bridgedLog("⚠️ Failed to trim silence: \(error.localizedDescription)")
         }
 
-        // Resample 16kHz to 44.1kHz for correct playback speed
-        do {
-            try self.resampleRecording(fileURL: metadata.fileURL)
-        } catch {
-            bridgedLog("⚠️ Resampling failed: \(error.localizedDescription)")
-        }
+        // Note: 16kHz files are kept as-is - expo-av, SFSpeechRecognizer, and Groq all handle 16kHz fine
 
         // Read the actual processed file duration
         var actualDuration: Double = 0
