@@ -263,7 +263,7 @@ final class HybridSound: HybridSoundSpec_base, HybridSoundSpec_protocol, SNResul
         do {
             try audioSession.setCategory(.playAndRecord,
                                         mode: .default,
-                                        options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP, .mixWithOthers])
+                                        options: [.defaultToSpeaker, .allowBluetooth, .mixWithOthers])
         } catch {
             let nsError = error as NSError
             bridgedLog("⚠️ Re-apply setCategory failed: \(error.localizedDescription) (code: \(nsError.code)) - continuing anyway")
@@ -327,112 +327,49 @@ final class HybridSound: HybridSoundSpec_base, HybridSoundSpec_protocol, SNResul
         guard let userInfo = notification.userInfo,
               let typeValue = userInfo[AVAudioSessionInterruptionTypeKey] as? UInt,
               let type = AVAudioSession.InterruptionType(rawValue: typeValue) else {
+            bridgedLog("⚠️ Audio interruption notification missing required keys")
             return
+        }
+
+        // Extract interruption reason (iOS 14.5+)
+        var reasonString = "unknown"
+        if #available(iOS 14.5, *) {
+            if let reasonValue = userInfo[AVAudioSession.interruptionReasonKey] as? UInt,
+               let reason = AVAudioSession.InterruptionReason(rawValue: reasonValue) {
+                switch reason {
+                case .default:
+                    reasonString = "default (another audio session)"
+                case .appWasSuspended:
+                    reasonString = "app was suspended by system"
+                case .builtInMicMuted:
+                    reasonString = "built-in mic muted (iPad)"
+                @unknown default:
+                    reasonString = "unknown reason (\(reasonValue))"
+                }
+            }
+        }
+
+        // Check if app was suspended (iOS 14+)
+        var wasSuspended = false
+        if #available(iOS 14.0, *) {
+            wasSuspended = (userInfo[AVAudioSession.interruptionWasSuspendedKey] as? Bool) ?? false
         }
 
         if type == .ended {
             // Check if we should resume (iOS tells us via interruption options)
             let shouldResume = (userInfo[AVAudioSessionInterruptionOptionKey] as? UInt) == AVAudioSession.InterruptionOptions.shouldResume.rawValue
 
-            bridgedLog("🔊 Audio interruption ended (shouldResume: \(shouldResume))")
+            bridgedLog("🔊 AUDIO INTERRUPTION ENDED")
+            bridgedLog("   Reason: \(reasonString)")
+            bridgedLog("   Was suspended: \(wasSuspended)")
+            bridgedLog("   Should resume: \(shouldResume)")
             logStateSnapshot(context: "interruption-ended")
-
-            // CRITICAL: If audio was playing (silent loop, ambient loop, or regular playback),
-            // we need to restart it to keep the session active (like Spotify does)
-            // This keeps the app alive in background and prevents session deactivation
-
-            // Restart engine after interruption
-            if audioEngineInitialized {
-                bridgedLog("🔧 Engine is initialized - attempting restart")
-                var sessionReactivated = false
-                do {
-                    // restartAudioEngine() reactivates the session AND restarts the engine
-                    bridgedLog("🔧 Calling restartAudioEngine()...")
-                    try restartAudioEngine()
-                    sessionReactivated = true
-                    bridgedLog("✅ Engine restart succeeded")
-                    logStateSnapshot(context: "after-restart-success")
-
-                    // Resume playback if we were playing before interruption
-                    // This keeps the session active, preventing deactivation (like Spotify)
-                    // Only resume if session reactivation succeeded
-                    if shouldResume && sessionReactivated {
-                        bridgedLog("🔄 Attempting to resume playback (shouldResume=\(shouldResume), sessionReactivated=\(sessionReactivated))")
-                        // Resume main playback if it was looping (silent loop or journey audio)
-                        if shouldLoopPlayback, let playerNode = currentPlayerNode, let audioFile = currentAudioFile {
-                            bridgedLog("🔄 Resuming loop playback after interruption")
-                            bridgedLog("   Player node state: isPlaying=\(playerNode.isPlaying), uri=\(currentPlaybackURI ?? "none")")
-                            // Player node might have stopped, restart it with seamless looping
-                            if !playerNode.isPlaying {
-                                bridgedLog("   Player node stopped - restarting with seamless loop")
-                                // Use the same seamless loop logic as startSeamlessLoop()
-                                if let uri = currentPlaybackURI {
-                                    let url: URL
-                                    if uri.hasPrefix("file://") {
-                                        url = URL(string: uri)!
-                                    } else {
-                                        url = URL(fileURLWithPath: uri)
-                                    }
-                                    startSeamlessLoop(audioFile: audioFile, url: url)
-                                    bridgedLog("   ✅ Seamless loop restarted")
-                                } else {
-                                    // Fallback: simple reschedule
-                                    bridgedLog("   Using fallback reschedule (no URI)")
-                                    playerNode.scheduleFile(audioFile, at: nil, completionHandler: nil)
-                                    playerNode.play()
-                                    bridgedLog("   ✅ Fallback playback started")
-                                }
-                            } else {
-                                bridgedLog("   Player node already playing - no restart needed")
-                            }
-                        } else {
-                            bridgedLog("   No loop playback to resume (shouldLoopPlayback=\(shouldLoopPlayback), playerNode=\(currentPlayerNode != nil), audioFile=\(currentAudioFile != nil))")
-                        }
-
-                        // Resume ambient loop if it was playing
-                        if isAmbientLoopPlaying, let playerD = audioPlayerNodeD, let ambientFile = currentAmbientFile {
-                            bridgedLog("🔄 Resuming ambient loop after interruption")
-                            bridgedLog("   Ambient player state: isPlaying=\(playerD.isPlaying)")
-                            if !playerD.isPlaying {
-                                bridgedLog("   Ambient player stopped - restarting")
-                                // Reschedule multiple iterations for seamless looping
-                                playerD.scheduleFile(ambientFile, at: nil, completionHandler: nil)
-                                playerD.scheduleFile(ambientFile, at: nil, completionHandler: nil)
-                                playerD.scheduleFile(ambientFile, at: nil) { [weak self] in
-                                    self?.scheduleMoreAmbientLoops(audioFile: ambientFile, playerNode: playerD)
-                                }
-                                playerD.play()
-                                bridgedLog("   ✅ Ambient loop restarted")
-                            } else {
-                                bridgedLog("   Ambient player already playing - no restart needed")
-                            }
-                        } else {
-                            bridgedLog("   No ambient loop to resume (isAmbientLoopPlaying=\(isAmbientLoopPlaying), playerD=\(audioPlayerNodeD != nil), ambientFile=\(currentAmbientFile != nil))")
-                        }
-
-                        bridgedLog("🔄 Playback resume attempt completed")
-                    } else {
-                        bridgedLog("⚠️ Not resuming playback: shouldResume=\(shouldResume), sessionReactivated=\(sessionReactivated)")
-                    }
-                } catch {
-                    // PlayAndRecord restart failed - session is broken
-                    // This happens when the app is backgrounded and iOS won't grant mic access
-                    let nsError = error as NSError
-                    let errorCode = nsError.code
-
-                    bridgedLog("❌ PlayAndRecord restart failed: \(error.localizedDescription) (code: \(errorCode))")
-                    bridgedLog("⚠️ Session is broken - recording unavailable until app returns to foreground")
-                    logStateSnapshot(context: "playandrecord-restart-failed")
-                }
-            } else {
-                bridgedLog("⚠️ Engine not initialized - skipping restart")
-            }
         } else if type == .began {
-            bridgedLog("🔇 Audio interruption began")
+            bridgedLog("🔇 AUDIO INTERRUPTION BEGAN")
+            bridgedLog("   Reason: \(reasonString)")
+            bridgedLog("   Was suspended: \(wasSuspended)")
             logStateSnapshot(context: "interruption-began")
-            // Engine will be stopped automatically by iOS
-            // Player nodes will also stop automatically
-            bridgedLog("   Engine and players will be stopped automatically by iOS")
+            bridgedLog("   ⚠️ Engine and players will be stopped automatically by iOS")
         }
     }
 
@@ -551,10 +488,10 @@ final class HybridSound: HybridSoundSpec_base, HybridSoundSpec_protocol, SNResul
     private func logStateSnapshot(context: String) {
         let session = AVAudioSession.sharedInstance()
 
-        // Recording state
+        // Recording state (note: no API to check if tap is installed - only buffer flow confirms it)
         let mode = currentMode == .idle ? "idle" : (currentMode == .manual ? "manual" : "vad")
-        let hasTap = audioEngine?.inputNode.engine != nil
         let hasSegment = currentSegmentFile != nil
+        let bufferCount = spscBuffer?.availableChunks ?? 0
 
         // Engine state
         let engineInit = audioEngineInitialized
@@ -562,14 +499,17 @@ final class HybridSound: HybridSoundSpec_base, HybridSoundSpec_protocol, SNResul
 
         // Session state
         let category = session.category.rawValue
+        let isActive = session.isOtherAudioPlaying == false  // Indirect check
         let route = session.currentRoute.outputs.map { $0.portName }.joined(separator: ", ")
+        let inputRoute = session.currentRoute.inputs.map { $0.portName }.joined(separator: ", ")
         let sampleRate = Int(session.sampleRate)
 
         bridgedLog("📊 STATE SNAPSHOT [\(context)]:")
-        bridgedLog("   🎙️ Recording: mode=\(mode), tap=\(hasTap), segment=\(hasSegment)")
+        bridgedLog("   🎙️ Recording: mode=\(mode), segment=\(hasSegment), buffer=\(bufferCount) chunks")
         bridgedLog("   🔧 Engine: init=\(engineInit), running=\(engineRun)")
         bridgedLog("   🔊 Playback: loop=\(shouldLoopPlayback), ambient=\(isAmbientLoopPlaying)")
-        bridgedLog("   📡 Session: \(category), \(sampleRate)Hz, route=[\(route)]")
+        bridgedLog("   📡 Session: \(category), \(sampleRate)Hz")
+        bridgedLog("   📡 Routes: out=[\(route)], in=[\(inputRoute)]")
     }
 
 
