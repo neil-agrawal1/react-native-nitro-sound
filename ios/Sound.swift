@@ -6,7 +6,7 @@ import FluidAudio
 import Speech
 import MediaPlayer
 
-    final class HybridSound: HybridSoundSpec_base, HybridSoundSpec_protocol, SNResultsObserving {
+final class HybridSound: HybridSoundSpec_base, HybridSoundSpec_protocol, SNResultsObserving {
     private var audioEngine: AVAudioEngine?
     private var audioEngineInitialized = false
     private let engineInitLock = NSLock() // Thread-safe initialization guard
@@ -96,43 +96,6 @@ import MediaPlayer
     private var currentTrackDuration: Double = 0.0
     private var nowPlayingArtwork: MPMediaItemArtwork?
 
-    // MARK: - Audio Format Conversion Helper
-
-    /// Converts a buffer from hardware sample rate (e.g., 48kHz) to 16kHz for VAD processing
-    private func convertTo16kHz(_ buffer: AVAudioPCMBuffer) -> AVAudioPCMBuffer? {
-        guard let converter = self.audioConverter,
-              let targetFormat = self.targetFormat else {
-            return nil
-        }
-
-        // Calculate output frame capacity based on sample rate ratio
-        let sampleRateRatio = targetFormat.sampleRate / buffer.format.sampleRate
-        let outputFrameCapacity = AVAudioFrameCount(Double(buffer.frameLength) * sampleRateRatio)
-
-        // Create output buffer at target format (16kHz)
-        guard let outputBuffer = AVAudioPCMBuffer(
-            pcmFormat: targetFormat,
-            frameCapacity: outputFrameCapacity
-        ) else {
-            return nil
-        }
-
-        var error: NSError?
-        let inputBlock: AVAudioConverterInputBlock = { inNumPackets, outStatus in
-            outStatus.pointee = .haveData
-            return buffer
-        }
-
-        converter.convert(to: outputBuffer, error: &error, withInputFrom: inputBlock)
-
-        if let error = error {
-            self.bridgedLog("⚠️ Conversion error: \(error.localizedDescription)")
-            return nil
-        }
-
-        return outputBuffer
-    }
-
     // Manual mode silence detection (default 15 seconds at ~14 fps = 210 frames)
     private var manualSilenceFrameCount: Int = 0
     private var manualSilenceThreshold: Int = 210  // Configurable, defaults to ~15 seconds at observed 14 fps
@@ -171,242 +134,11 @@ import MediaPlayer
     private var pauseCallback: (() -> Void)?
     private var playCallback: (() -> Void)?
 
-    // MARK: - Unified Audio Engine Management
+    // MARK: - Initialization
 
     override init() {
         super.init()
         setupAudioInterruptionHandling()
-    }
-
-    private func setupAudioInterruptionHandling() {
-        // Handle audio interruptions (phone calls, other apps, etc.)
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(handleAudioInterruption),
-            name: AVAudioSession.interruptionNotification,
-            object: AVAudioSession.sharedInstance()
-        )
-    }
-
-    @objc private func handleAudioInterruption(notification: Notification) {
-        guard let userInfo = notification.userInfo,
-              let typeValue = userInfo[AVAudioSessionInterruptionTypeKey] as? UInt,
-              let type = AVAudioSession.InterruptionType(rawValue: typeValue) else {
-            return
-        }
-
-        if type == .ended {
-            // Check if we should resume (iOS tells us via interruption options)
-            let shouldResume = (userInfo[AVAudioSessionInterruptionOptionKey] as? UInt) == AVAudioSession.InterruptionOptions.shouldResume.rawValue
-            
-            bridgedLog("🔊 Audio interruption ended (shouldResume: \(shouldResume))")
-            logStateSnapshot(context: "interruption-ended")
-            
-            // CRITICAL: If audio was playing (silent loop, ambient loop, or regular playback),
-            // we need to restart it to keep the session active (like Spotify does)
-            // This keeps the app alive in background and prevents session deactivation
-            
-            // Restart engine after interruption
-            if audioEngineInitialized {
-                bridgedLog("🔧 Engine is initialized - attempting restart")
-                var sessionReactivated = false
-                do {
-                    // restartAudioEngine() reactivates the session AND restarts the engine
-                    bridgedLog("🔧 Calling restartAudioEngine()...")
-                    try restartAudioEngine()
-                    sessionReactivated = true
-                    bridgedLog("✅ Engine restart succeeded")
-                    logStateSnapshot(context: "after-restart-success")
-                    
-                    // Resume playback if we were playing before interruption
-                    // This keeps the session active, preventing deactivation (like Spotify)
-                    // Only resume if session reactivation succeeded
-                    if shouldResume && sessionReactivated {
-                        bridgedLog("🔄 Attempting to resume playback (shouldResume=\(shouldResume), sessionReactivated=\(sessionReactivated))")
-                        // Resume main playback if it was looping (silent loop or journey audio)
-                        if shouldLoopPlayback, let playerNode = currentPlayerNode, let audioFile = currentAudioFile {
-                            bridgedLog("🔄 Resuming loop playback after interruption")
-                            bridgedLog("   Player node state: isPlaying=\(playerNode.isPlaying), uri=\(currentPlaybackURI ?? "none")")
-                            // Player node might have stopped, restart it with seamless looping
-                            if !playerNode.isPlaying {
-                                bridgedLog("   Player node stopped - restarting with seamless loop")
-                                // Use the same seamless loop logic as startSeamlessLoop()
-                                if let uri = currentPlaybackURI {
-                                    let url: URL
-                                    if uri.hasPrefix("file://") {
-                                        url = URL(string: uri)!
-                                    } else {
-                                        url = URL(fileURLWithPath: uri)
-                                    }
-                                    startSeamlessLoop(audioFile: audioFile, url: url)
-                                    bridgedLog("   ✅ Seamless loop restarted")
-                                } else {
-                                    // Fallback: simple reschedule
-                                    bridgedLog("   Using fallback reschedule (no URI)")
-                                    playerNode.scheduleFile(audioFile, at: nil, completionHandler: nil)
-                                    playerNode.play()
-                                    bridgedLog("   ✅ Fallback playback started")
-                                }
-                            } else {
-                                bridgedLog("   Player node already playing - no restart needed")
-                            }
-                        } else {
-                            bridgedLog("   No loop playback to resume (shouldLoopPlayback=\(shouldLoopPlayback), playerNode=\(currentPlayerNode != nil), audioFile=\(currentAudioFile != nil))")
-                        }
-                        
-                        // Resume ambient loop if it was playing
-                        if isAmbientLoopPlaying, let playerD = audioPlayerNodeD, let ambientFile = currentAmbientFile {
-                            bridgedLog("🔄 Resuming ambient loop after interruption")
-                            bridgedLog("   Ambient player state: isPlaying=\(playerD.isPlaying)")
-                            if !playerD.isPlaying {
-                                bridgedLog("   Ambient player stopped - restarting")
-                                // Reschedule multiple iterations for seamless looping
-                                playerD.scheduleFile(ambientFile, at: nil, completionHandler: nil)
-                                playerD.scheduleFile(ambientFile, at: nil, completionHandler: nil)
-                                playerD.scheduleFile(ambientFile, at: nil) { [weak self] in
-                                    self?.scheduleMoreAmbientLoops(audioFile: ambientFile, playerNode: playerD)
-                                }
-                                playerD.play()
-                                bridgedLog("   ✅ Ambient loop restarted")
-                            } else {
-                                bridgedLog("   Ambient player already playing - no restart needed")
-                            }
-                        } else {
-                            bridgedLog("   No ambient loop to resume (isAmbientLoopPlaying=\(isAmbientLoopPlaying), playerD=\(audioPlayerNodeD != nil), ambientFile=\(currentAmbientFile != nil))")
-                        }
-                        
-                        bridgedLog("🔄 Playback resume attempt completed")
-                    } else {
-                        bridgedLog("⚠️ Not resuming playback: shouldResume=\(shouldResume), sessionReactivated=\(sessionReactivated)")
-                    }
-                } catch {
-                    // PlayAndRecord restart failed - session is broken
-                    // This happens when the app is backgrounded and iOS won't grant mic access
-                    let nsError = error as NSError
-                    let errorCode = nsError.code
-
-                    bridgedLog("❌ PlayAndRecord restart failed: \(error.localizedDescription) (code: \(errorCode))")
-                    bridgedLog("⚠️ Session is broken - recording unavailable until app returns to foreground")
-                    logStateSnapshot(context: "playandrecord-restart-failed")
-                }
-            } else {
-                bridgedLog("⚠️ Engine not initialized - skipping restart")
-            }
-        } else if type == .began {
-            bridgedLog("🔇 Audio interruption began")
-            logStateSnapshot(context: "interruption-began")
-            // Engine will be stopped automatically by iOS
-            // Player nodes will also stop automatically
-            bridgedLog("   Engine and players will be stopped automatically by iOS")
-        }
-    }
-
-    // MARK: - Debug Logging Helper
-
-    private func logStateSnapshot(context: String) {
-        let session = AVAudioSession.sharedInstance()
-
-        // Recording state
-        let mode = currentMode == .idle ? "idle" : (currentMode == .manual ? "manual" : "vad")
-        let hasTap = audioEngine?.inputNode.engine != nil
-        let hasSegment = currentSegmentFile != nil
-
-        // Engine state
-        let engineInit = audioEngineInitialized
-        let engineRun = audioEngine?.isRunning ?? false
-
-        // Session state
-        let category = session.category.rawValue
-        let route = session.currentRoute.outputs.map { $0.portName }.joined(separator: ", ")
-        let sampleRate = Int(session.sampleRate)
-
-        bridgedLog("📊 STATE SNAPSHOT [\(context)]:")
-        bridgedLog("   🎙️ Recording: mode=\(mode), tap=\(hasTap), segment=\(hasSegment)")
-        bridgedLog("   🔧 Engine: init=\(engineInit), running=\(engineRun)")
-        bridgedLog("   🔊 Playback: loop=\(shouldLoopPlayback), ambient=\(isAmbientLoopPlaying)")
-        bridgedLog("   📡 Session: \(category), \(sampleRate)Hz, route=[\(route)]")
-    }
-
-    private func restartAudioEngine() throws {
-        guard let engine = audioEngine else {
-            bridgedLog("❌ Cannot restart engine - engine is nil")
-            throw RuntimeError.error(withMessage: "No engine to restart")
-        }
-
-        bridgedLog("🔧 Restarting audio engine...")
-
-        // IMPORTANT: AVAudioSession and AVAudioEngine are separate systems:
-        // - AVAudioSession: iOS system-level singleton that controls audio permissions/routing
-        // - AVAudioEngine: Your app's audio processing engine instance
-        //
-        // After an interruption, iOS may deactivate the session (setActive(false))
-        // but the engine instance still exists. We must reactivate the SESSION first,
-        // then restart the ENGINE. Trying to start the engine without an active session
-        // can cause format errors (2003329396) because hardware isn't accessible.
-        let audioSession = AVAudioSession.sharedInstance()
-
-        // Step 1: Re-apply mixable .playAndRecord category (iOS may clear options after interruption).
-        // Background reactivation fails with 560557684 (CannotInterruptOthers) if category is not mixable.
-        do {
-            try audioSession.setCategory(.playAndRecord,
-                                        mode: .default,
-                                        options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP, .mixWithOthers])
-        } catch {
-            let nsError = error as NSError
-            bridgedLog("⚠️ Re-apply setCategory failed: \(error.localizedDescription) (code: \(nsError.code)) - continuing anyway")
-        }
-
-        // Step 2: Reactivate the audio session (tell iOS we want audio access again)
-        // NOTE: In background with locked device, this might fail if iOS has suspended the app.
-        // That's OK - the next audio operation (alarm, silent loop) will fully reinitialize.
-        do {
-            try audioSession.setActive(true, options: [])
-        } catch {
-            let nsError = error as NSError
-            bridgedLog("⚠️ Failed to reactivate audio session: \(error.localizedDescription) (code: \(nsError.code)) - continuing anyway")
-        }
-
-        // Step 3: Restart the audio engine (start audio processing)
-        if !engine.isRunning {
-            do {
-                try engine.start()
-                bridgedLog("✅ Audio engine restarted")
-            } catch {
-                // If restart fails with format error (2003329396 = kAudioFormatUnsupportedDataFormatError),
-                // the engine's format configuration is likely stale/invalid after interruption
-                let nsError = error as NSError
-                let errorCode = nsError.code
-
-                if errorCode == 2003329396 { // kAudioFormatUnsupportedDataFormatError
-                    bridgedLog("⚠️ Format error (2003329396) - destroying engine for reinit")
-                    // Destroy the engine instance so initializeAudioEngine() creates a fresh one
-                    // This ensures we get a clean format configuration on next operation
-                    audioEngine = nil
-                    audioPlayerNodeA = nil
-                    audioPlayerNodeB = nil
-                    audioPlayerNodeC = nil
-                    audioPlayerNodeD = nil
-                    audioEngineInitialized = false
-                    // Don't throw - allow graceful degradation, next operation will fully reinitialize
-                } else {
-                    bridgedLog("❌ Engine restart failed: \(error.localizedDescription) (code: \(errorCode))")
-                    throw error
-                }
-            }
-        } else {
-            bridgedLog("✅ Audio engine already running")
-        }
-    }
-
-    private func ensureEngineRunning() throws {
-        guard let engine = audioEngine else {
-            throw RuntimeError.error(withMessage: "Audio engine not initialized")
-        }
-
-        if !engine.isRunning {
-            bridgedLog("⚠️ ENGINE: Restarting stopped engine")
-            try restartAudioEngine()
-        }
     }
 
     private func initializeAudioEngine() throws {
@@ -482,80 +214,214 @@ import MediaPlayer
         }
     }
 
+    // MARK: - Engine Lifecycle
 
+    private func ensureEngineRunning() throws {
+        guard let engine = audioEngine else {
+            throw RuntimeError.error(withMessage: "Audio engine not initialized")
+        }
 
-    private func getCurrentPlayerNode() -> AVAudioPlayerNode? {
-        // For now, always use player A. Later we can implement switching for crossfading
-        switch activePlayer {
-        case .playerA:
-            return audioPlayerNodeA
-        case .playerB:
-            return audioPlayerNodeB
-        case .playerC:
-            return audioPlayerNodeC
-        case .none:
-            // Default to player A for first use
-            activePlayer = .playerA
-            return audioPlayerNodeA
+        if !engine.isRunning {
+            bridgedLog("⚠️ ENGINE: Restarting stopped engine")
+            try restartAudioEngine()
         }
     }
 
-    private func getPlayerEnum(for node: AVAudioPlayerNode?) -> ActivePlayer {
-        guard let node = node else { return .none }
-        if node === audioPlayerNodeA { return .playerA }
-        if node === audioPlayerNodeB { return .playerB }
-        if node === audioPlayerNodeC { return .playerC }
-        return .none
-    }
-
-    private func getNodeName(for node: AVAudioPlayerNode?) -> String {
-        guard let node = node else { return "NONE" }
-        if node === audioPlayerNodeA { return "A" }
-        if node === audioPlayerNodeB { return "B" }
-        if node === audioPlayerNodeC { return "C" }
-        if node === audioPlayerNodeD { return "D (Ambient)" }
-        return "UNKNOWN"
-    }
-
-    private func handlePlaybackCompletion() {
-        if let audioFile = self.currentAudioFile {
-            let durationSeconds = Double(audioFile.length) / audioFile.fileFormat.sampleRate
-            let durationMs = durationSeconds * 1000
-            self.emitPlaybackEndEvents(durationMs: durationMs, includePlaybackUpdate: true)
+    private func restartAudioEngine() throws {
+        guard let engine = audioEngine else {
+            bridgedLog("❌ Cannot restart engine - engine is nil")
+            throw RuntimeError.error(withMessage: "No engine to restart")
         }
 
-        self.stopPlayTimer()
-        self.currentPlayerNode = nil
+        bridgedLog("🔧 Restarting audio engine...")
+
+        // IMPORTANT: AVAudioSession and AVAudioEngine are separate systems:
+        // - AVAudioSession: iOS system-level singleton that controls audio permissions/routing
+        // - AVAudioEngine: Your app's audio processing engine instance
+        //
+        // After an interruption, iOS may deactivate the session (setActive(false))
+        // but the engine instance still exists. We must reactivate the SESSION first,
+        // then restart the ENGINE. Trying to start the engine without an active session
+        // can cause format errors (2003329396) because hardware isn't accessible.
+        let audioSession = AVAudioSession.sharedInstance()
+
+        // Step 1: Re-apply mixable .playAndRecord category (iOS may clear options after interruption).
+        // Background reactivation fails with 560557684 (CannotInterruptOthers) if category is not mixable.
+        do {
+            try audioSession.setCategory(.playAndRecord,
+                                        mode: .default,
+                                        options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP, .mixWithOthers])
+        } catch {
+            let nsError = error as NSError
+            bridgedLog("⚠️ Re-apply setCategory failed: \(error.localizedDescription) (code: \(nsError.code)) - continuing anyway")
+        }
+
+        // Step 2: Reactivate the audio session (tell iOS we want audio access again)
+        // NOTE: In background with locked device, this might fail if iOS has suspended the app.
+        // That's OK - the next audio operation (alarm, silent loop) will fully reinitialize.
+        do {
+            try audioSession.setActive(true, options: [])
+        } catch {
+            let nsError = error as NSError
+            bridgedLog("⚠️ Failed to reactivate audio session: \(error.localizedDescription) (code: \(nsError.code)) - continuing anyway")
+        }
+
+        // Step 3: Restart the audio engine (start audio processing)
+        if !engine.isRunning {
+            do {
+                try engine.start()
+                bridgedLog("✅ Audio engine restarted")
+            } catch {
+                // If restart fails with format error (2003329396 = kAudioFormatUnsupportedDataFormatError),
+                // the engine's format configuration is likely stale/invalid after interruption
+                let nsError = error as NSError
+                let errorCode = nsError.code
+
+                if errorCode == 2003329396 { // kAudioFormatUnsupportedDataFormatError
+                    bridgedLog("⚠️ Format error (2003329396) - destroying engine for reinit")
+                    // Destroy the engine instance so initializeAudioEngine() creates a fresh one
+                    // This ensures we get a clean format configuration on next operation
+                    audioEngine = nil
+                    audioPlayerNodeA = nil
+                    audioPlayerNodeB = nil
+                    audioPlayerNodeC = nil
+                    audioPlayerNodeD = nil
+                    audioEngineInitialized = false
+                    // Don't throw - allow graceful degradation, next operation will fully reinitialize
+                } else {
+                    bridgedLog("❌ Engine restart failed: \(error.localizedDescription) (code: \(errorCode))")
+                    throw error
+                }
+            }
+        } else {
+            bridgedLog("✅ Audio engine already running")
+        }
     }
 
-    private func scheduleMoreLoops(audioFile: AVAudioFile, playerNode: AVAudioPlayerNode) {
-        guard self.shouldLoopPlayback else {
+    // MARK: - Audio Interruption Handling
+
+    private func setupAudioInterruptionHandling() {
+        // Handle audio interruptions (phone calls, other apps, etc.)
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleAudioInterruption),
+            name: AVAudioSession.interruptionNotification,
+            object: AVAudioSession.sharedInstance()
+        )
+    }
+
+    @objc private func handleAudioInterruption(notification: Notification) {
+        guard let userInfo = notification.userInfo,
+              let typeValue = userInfo[AVAudioSessionInterruptionTypeKey] as? UInt,
+              let type = AVAudioSession.InterruptionType(rawValue: typeValue) else {
             return
         }
 
-        // Schedule 3 more iterations
-        playerNode.scheduleFile(audioFile, at: nil, completionHandler: nil)
-        playerNode.scheduleFile(audioFile, at: nil, completionHandler: nil)
-        playerNode.scheduleFile(audioFile, at: nil) { [weak self] in
-            // Recursive scheduling for continuous looping
-            self?.scheduleMoreLoops(audioFile: audioFile, playerNode: playerNode)
+        if type == .ended {
+            // Check if we should resume (iOS tells us via interruption options)
+            let shouldResume = (userInfo[AVAudioSessionInterruptionOptionKey] as? UInt) == AVAudioSession.InterruptionOptions.shouldResume.rawValue
+
+            bridgedLog("🔊 Audio interruption ended (shouldResume: \(shouldResume))")
+            logStateSnapshot(context: "interruption-ended")
+
+            // CRITICAL: If audio was playing (silent loop, ambient loop, or regular playback),
+            // we need to restart it to keep the session active (like Spotify does)
+            // This keeps the app alive in background and prevents session deactivation
+
+            // Restart engine after interruption
+            if audioEngineInitialized {
+                bridgedLog("🔧 Engine is initialized - attempting restart")
+                var sessionReactivated = false
+                do {
+                    // restartAudioEngine() reactivates the session AND restarts the engine
+                    bridgedLog("🔧 Calling restartAudioEngine()...")
+                    try restartAudioEngine()
+                    sessionReactivated = true
+                    bridgedLog("✅ Engine restart succeeded")
+                    logStateSnapshot(context: "after-restart-success")
+
+                    // Resume playback if we were playing before interruption
+                    // This keeps the session active, preventing deactivation (like Spotify)
+                    // Only resume if session reactivation succeeded
+                    if shouldResume && sessionReactivated {
+                        bridgedLog("🔄 Attempting to resume playback (shouldResume=\(shouldResume), sessionReactivated=\(sessionReactivated))")
+                        // Resume main playback if it was looping (silent loop or journey audio)
+                        if shouldLoopPlayback, let playerNode = currentPlayerNode, let audioFile = currentAudioFile {
+                            bridgedLog("🔄 Resuming loop playback after interruption")
+                            bridgedLog("   Player node state: isPlaying=\(playerNode.isPlaying), uri=\(currentPlaybackURI ?? "none")")
+                            // Player node might have stopped, restart it with seamless looping
+                            if !playerNode.isPlaying {
+                                bridgedLog("   Player node stopped - restarting with seamless loop")
+                                // Use the same seamless loop logic as startSeamlessLoop()
+                                if let uri = currentPlaybackURI {
+                                    let url: URL
+                                    if uri.hasPrefix("file://") {
+                                        url = URL(string: uri)!
+                                    } else {
+                                        url = URL(fileURLWithPath: uri)
+                                    }
+                                    startSeamlessLoop(audioFile: audioFile, url: url)
+                                    bridgedLog("   ✅ Seamless loop restarted")
+                                } else {
+                                    // Fallback: simple reschedule
+                                    bridgedLog("   Using fallback reschedule (no URI)")
+                                    playerNode.scheduleFile(audioFile, at: nil, completionHandler: nil)
+                                    playerNode.play()
+                                    bridgedLog("   ✅ Fallback playback started")
+                                }
+                            } else {
+                                bridgedLog("   Player node already playing - no restart needed")
+                            }
+                        } else {
+                            bridgedLog("   No loop playback to resume (shouldLoopPlayback=\(shouldLoopPlayback), playerNode=\(currentPlayerNode != nil), audioFile=\(currentAudioFile != nil))")
+                        }
+
+                        // Resume ambient loop if it was playing
+                        if isAmbientLoopPlaying, let playerD = audioPlayerNodeD, let ambientFile = currentAmbientFile {
+                            bridgedLog("🔄 Resuming ambient loop after interruption")
+                            bridgedLog("   Ambient player state: isPlaying=\(playerD.isPlaying)")
+                            if !playerD.isPlaying {
+                                bridgedLog("   Ambient player stopped - restarting")
+                                // Reschedule multiple iterations for seamless looping
+                                playerD.scheduleFile(ambientFile, at: nil, completionHandler: nil)
+                                playerD.scheduleFile(ambientFile, at: nil, completionHandler: nil)
+                                playerD.scheduleFile(ambientFile, at: nil) { [weak self] in
+                                    self?.scheduleMoreAmbientLoops(audioFile: ambientFile, playerNode: playerD)
+                                }
+                                playerD.play()
+                                bridgedLog("   ✅ Ambient loop restarted")
+                            } else {
+                                bridgedLog("   Ambient player already playing - no restart needed")
+                            }
+                        } else {
+                            bridgedLog("   No ambient loop to resume (isAmbientLoopPlaying=\(isAmbientLoopPlaying), playerD=\(audioPlayerNodeD != nil), ambientFile=\(currentAmbientFile != nil))")
+                        }
+
+                        bridgedLog("🔄 Playback resume attempt completed")
+                    } else {
+                        bridgedLog("⚠️ Not resuming playback: shouldResume=\(shouldResume), sessionReactivated=\(sessionReactivated)")
+                    }
+                } catch {
+                    // PlayAndRecord restart failed - session is broken
+                    // This happens when the app is backgrounded and iOS won't grant mic access
+                    let nsError = error as NSError
+                    let errorCode = nsError.code
+
+                    bridgedLog("❌ PlayAndRecord restart failed: \(error.localizedDescription) (code: \(errorCode))")
+                    bridgedLog("⚠️ Session is broken - recording unavailable until app returns to foreground")
+                    logStateSnapshot(context: "playandrecord-restart-failed")
+                }
+            } else {
+                bridgedLog("⚠️ Engine not initialized - skipping restart")
+            }
+        } else if type == .began {
+            bridgedLog("🔇 Audio interruption began")
+            logStateSnapshot(context: "interruption-began")
+            // Engine will be stopped automatically by iOS
+            // Player nodes will also stop automatically
+            bridgedLog("   Engine and players will be stopped automatically by iOS")
         }
     }
-
-    private func scheduleMoreAmbientLoops(audioFile: AVAudioFile, playerNode: AVAudioPlayerNode) {
-        guard self.isAmbientLoopPlaying else {
-            return
-        }
-
-        // Schedule 3 more iterations
-        playerNode.scheduleFile(audioFile, at: nil, completionHandler: nil)
-        playerNode.scheduleFile(audioFile, at: nil, completionHandler: nil)
-        playerNode.scheduleFile(audioFile, at: nil) { [weak self] in
-            // Recursive scheduling for continuous looping
-            self?.scheduleMoreAmbientLoops(audioFile: audioFile, playerNode: playerNode)
-        }
-    }
-
 
     // MARK: - Recording Methods
 
@@ -605,6 +471,734 @@ import MediaPlayer
         }
 
         return promise
+    }
+
+    private func setupRecording(promise: Promise<Void>) {
+        do {
+            guard let engine = self.audioEngine else {
+                bridgedLog("❌ setupRecording: Audio engine is nil")
+                promise.reject(withError: RuntimeError.error(withMessage: "Unified audio engine not initialized"))
+                return
+            }
+
+            if !engine.isRunning {
+                throw RuntimeError.error(withMessage: "Audio engine is not running")
+            }
+
+            // Initialize session timestamp for unique filenames (milliseconds since epoch)
+            self.sessionTimestamp = Int64(Date().timeIntervalSince1970 * 1000)
+            self.segmentCounter = 0
+
+            let inputNode = engine.inputNode
+            let hwFormat = inputNode.outputFormat(forBus: 0)
+
+            // Create target format for VAD (16kHz mono)
+            guard let target16kHzFormat = AVAudioFormat(
+                commonFormat: .pcmFormatFloat32,
+                sampleRate: 16000,
+                channels: 1,
+                interleaved: false
+            ) else {
+                throw RuntimeError.error(withMessage: "Failed to create 16kHz target format")
+            }
+
+            self.targetFormat = target16kHzFormat
+
+            // Create audio converter from hardware rate → 16kHz
+            guard let converter = AVAudioConverter(from: hwFormat, to: target16kHzFormat) else {
+                throw RuntimeError.error(withMessage: "Failed to create audio converter from \(Int(hwFormat.sampleRate))Hz to 16kHz")
+            }
+            self.audioConverter = converter
+
+            // Remove any existing taps
+            inputNode.removeTap(onBus: 0)
+
+            // Init rolling buffer for pre-roll
+            rollingBuffer = RollingAudioBuffer()
+
+            // Set mode to idle FIRST (before VAD initialization)
+            self.currentMode = .idle
+
+            // Initialize VAD components asynchronously (non-blocking)
+            Task {
+                do {
+                    let vadConfig = VadConfig(threshold: self.vadThreshold)
+                    self.vadManager = try await VadManager(config: vadConfig)
+                    self.vadStreamState = VadStreamState.initial()
+                } catch {
+                    self.bridgedLog("⚠️ VAD init failed, using fallback")
+                }
+            }
+
+            // Set default output directory if needed
+            if outputDirectory == nil {
+                let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+                outputDirectory = documentsURL.appendingPathComponent("speech_segments")
+            }
+            if let outputDir = outputDirectory {
+                try FileManager.default.createDirectory(at: outputDir, withIntermediateDirectories: true)
+            }
+
+            // Install tap using HARDWARE format (not 16kHz)
+            // We'll convert buffers to 16kHz inside the callback
+            inputNode.installTap(onBus: 0, bufferSize: 1024, format: hwFormat) { [weak self] buffer, time in
+                guard let self = self else { return }
+
+                self.tapFrameCounter += 1
+
+                // Convert buffer from hardware rate (48kHz) to 16kHz for VAD
+                guard let converted16kHzBuffer = self.convertTo16kHz(buffer) else {
+                    return
+                }
+
+                // VAD-based speech detection - ONLY when needed
+                var audioIsLoud = false
+
+                // Only compute VAD if we're in autoVAD mode, or in manual mode with active segment
+                if self.currentMode == .autoVAD || (self.currentMode == .manual && self.currentSegmentFile != nil) {
+                    if let vadMgr = self.vadManager,
+                       let vadState = self.vadStreamState {
+
+                        // Extract Float array from CONVERTED 16kHz buffer SYNCHRONOUSLY
+                        // Check if buffer has valid float channel data
+                        if let floatChannelData = converted16kHzBuffer.floatChannelData,
+                           floatChannelData[0] != nil {
+                            // Valid buffer - process VAD
+                            let frameLength = Int(converted16kHzBuffer.frameLength)
+                            let samples = Array(UnsafeBufferPointer(start: floatChannelData[0], count: frameLength))
+
+                            // Process VAD asynchronously (runs in background) with COPIED samples
+                            Task {
+                                do {
+                                    // Use public streaming API with the samples we copied above
+                                    // Custom VAD config optimized for whisper detection (FluidAudio recommended)
+                                    let customConfig = VadSegmentationConfig(
+                                        minSpeechDuration: 0.05,         // Catches brief whispers (FluidAudio recommended)
+                                        minSilenceDuration: 0.3,         // More tolerant of pauses (FluidAudio recommended)
+                                        maxSpeechDuration: 14.0,         // Keep default
+                                        speechPadding: 0.05,             // Must be <= minSpeechDuration (0.05)
+                                        silenceThresholdForSplit: 0.3,   // Keep default
+                                        negativeThreshold: 0.05,         // Explicit hysteresis for fading speech (FluidAudio recommended 0.03-0.08)
+                                        negativeThresholdOffset: 0.10,   // 0.10 instead of 0.15 - tighter hysteresis
+                                        minSilenceAtMaxSpeech: 0.098,    // Keep default
+                                        useMaxPossibleSilenceAtMaxSpeech: true  // Keep default
+                                    )
+
+                                    let streamResult = try await vadMgr.processStreamingChunk(
+                                        samples,
+                                        state: vadState,
+                                        config: customConfig
+                                    )
+
+                                    // Update state for next chunk
+                                    self.vadStreamState = streamResult.state
+                                } catch {
+                                    // VAD processing error - state stays at previous value (silent fail)
+                                }
+                            }
+
+                            // Use triggered state from most recent VAD result
+                            audioIsLoud = vadState.triggered
+                        } else {
+                            // Buffer data is invalid - log and skip VAD for this frame
+                            // if self.tapFrameCounter % 100 == 0 {
+                            //     self.bridgedLog("⚠️ Frame \(self.tapFrameCounter): Invalid floatChannelData, skipping VAD (audioIsLoud stays false)")
+                            // }
+                            // audioIsLoud stays false - continue with normal buffer writing below
+                        }
+
+                    } else {
+                        // VAD not initialized yet - log this condition
+                        if self.tapFrameCounter % 200 == 0 {
+                            let vadMgrExists = (self.vadManager != nil)
+                            let vadStateExists = (self.vadStreamState != nil)
+                            self.bridgedLog("⚠️ Frame \(self.tapFrameCounter): VAD not ready (vadMgr: \(vadMgrExists), vadState: \(vadStateExists))")
+                        }
+                        // audioIsLoud stays false - no fallback available
+                    }
+
+                    // Log final audioIsLoud value periodically
+                    // if self.tapFrameCounter % 100 == 0 {
+                    //     self.bridgedLog("🔊 Frame \(self.tapFrameCounter): audioIsLoud = \(audioIsLoud)")
+                    // }
+                }
+                // In idle mode, audioIsLoud stays false - no processing
+
+                // Pre-roll - write CONVERTED 16kHz buffer (not raw hardware buffer)
+                // Only write buffer in autoVAD mode, or in manual mode when segment is active
+                if self.currentMode == .autoVAD || (self.currentMode == .manual && self.currentSegmentFile != nil) {
+                    self.rollingBuffer?.write(converted16kHzBuffer)
+                }
+
+                // Segment handling - only run automatic detection if in autoVAD mode
+                if self.currentMode == .autoVAD {
+                    let isCurrentlyRecordingSegment = self.currentSegmentFile != nil
+                    if audioIsLoud {
+                        if !isCurrentlyRecordingSegment {
+                            self.currentSegmentIsManual = false
+                            // Use target 16kHz format for file writing
+                            if let targetFormat = self.targetFormat {
+                                self.startNewSegment(with: targetFormat)
+                            } else {
+                                self.bridgedLog("⚠️ Cannot start segment: targetFormat is nil!")
+                            }
+                        }
+                        self.silenceFrameCount = 0
+                    } else if isCurrentlyRecordingSegment {
+                        self.silenceFrameCount += 1
+                        if self.silenceFrameCount >= 50 {
+                            // Use same processing pipeline as manual segments (trim + resample)
+                            if let metadata = self.endCurrentSegmentWithoutCallback() {
+                                // No trim needed for auto segments (0 seconds)
+                                self.processAndFireSegmentCallback(metadata: metadata, trimSeconds: 0)
+                            }
+                            self.silenceFrameCount = 0
+                        }
+                    }
+                } else if self.currentMode == .manual && self.currentSegmentFile != nil {
+                    // In manual mode with active segment, detect silence for automatic progression
+                    if audioIsLoud {
+                        // Reset silence counter on speech
+                        self.manualSilenceFrameCount = 0
+                    } else {
+                        // Increment silence counter
+                        self.manualSilenceFrameCount += 1
+
+                        // Log every ~1 second (14 frames) to show detection is running
+                        if self.manualSilenceFrameCount % 14 == 0 {
+                            let elapsed = self.manualSilenceFrameCount / 14
+                            let total = self.manualSilenceThreshold / 14
+                            self.bridgedLog("🔇 Listening... \(elapsed)/\(total)s silence")
+                        }
+
+                        if self.manualSilenceFrameCount >= self.manualSilenceThreshold {
+                            let endTime = Date()
+                            let formatter = DateFormatter()
+                            formatter.dateFormat = "HH:mm:ss.SSS"
+                            self.bridgedLog("🛑 Recording ended at \(formatter.string(from: endTime)) (silence timeout reached)")
+
+                            self.manualSilenceFrameCount = 0  // Reset counter
+
+                            // Close segment and get metadata (NO callback yet)
+                            guard let metadata = self.endCurrentSegmentWithoutCallback() else {
+                                return
+                            }
+
+                            // Process the audio file (trim silence, then resample) and fire callback
+                            let silenceDurationSeconds = Double(self.manualSilenceThreshold) / 14.0
+
+                            // Don't trim for voice command segments (1s timeout)
+                            // Only trim for longer segments like dreams (15s timeout)
+                            let shouldTrim = silenceDurationSeconds > 2.0  // If timeout > 2s, it's a dream segment
+                            let trimAmount = shouldTrim ? silenceDurationSeconds : 0.0
+
+                            self.processAndFireSegmentCallback(metadata: metadata, trimSeconds: trimAmount)
+
+                            // Notify JavaScript via callback
+                            if let callback = self.manualSilenceCallback {
+                                DispatchQueue.main.async {
+                                    callback()
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Write to file ONLY if recording a segment AND not in idle mode
+                // Write the CONVERTED 16kHz buffer (not the raw hardware buffer)
+                if self.currentMode != .idle, let segmentFile = self.currentSegmentFile {
+                    do {
+                        try segmentFile.write(from: converted16kHzBuffer)
+                    } catch {
+                        // Silent fail to avoid log spam
+                    }
+                }
+            }
+
+            promise.resolve(withResult: ())
+
+        } catch {
+            bridgedLog("❌ RECORDING: Setup failed - \(error.localizedDescription)")
+            promise.reject(withError: RuntimeError.error(withMessage: "Recording setup failed: \(error.localizedDescription)"))
+        }
+    }
+
+    // MARK: - Debug Helpers
+
+    private func logStateSnapshot(context: String) {
+        let session = AVAudioSession.sharedInstance()
+
+        // Recording state
+        let mode = currentMode == .idle ? "idle" : (currentMode == .manual ? "manual" : "vad")
+        let hasTap = audioEngine?.inputNode.engine != nil
+        let hasSegment = currentSegmentFile != nil
+
+        // Engine state
+        let engineInit = audioEngineInitialized
+        let engineRun = audioEngine?.isRunning ?? false
+
+        // Session state
+        let category = session.category.rawValue
+        let route = session.currentRoute.outputs.map { $0.portName }.joined(separator: ", ")
+        let sampleRate = Int(session.sampleRate)
+
+        bridgedLog("📊 STATE SNAPSHOT [\(context)]:")
+        bridgedLog("   🎙️ Recording: mode=\(mode), tap=\(hasTap), segment=\(hasSegment)")
+        bridgedLog("   🔧 Engine: init=\(engineInit), running=\(engineRun)")
+        bridgedLog("   🔊 Playback: loop=\(shouldLoopPlayback), ambient=\(isAmbientLoopPlaying)")
+        bridgedLog("   📡 Session: \(category), \(sampleRate)Hz, route=[\(route)]")
+    }
+
+
+
+    public func stopRecorder() throws -> Promise<Void> {
+        let promise = Promise<Void>()
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else {
+                promise.reject(withError: RuntimeError.error(withMessage: "Self is nil"))
+                return
+            }
+
+            // End any current segment before stopping
+            if self.currentSegmentFile != nil {
+                // Get metadata and process with trim + resample
+                if let metadata = self.endCurrentSegmentWithoutCallback() {
+                    // Use 0 seconds trim for manual stop (no silence to remove)
+                    self.processAndFireSegmentCallback(metadata: metadata, trimSeconds: 0)
+                }
+            }
+
+            // Remove tap from unified engine's input node
+            if let engine = self.audioEngine {
+                engine.inputNode.removeTap(onBus: 0)
+            }
+
+            // Clean up VAD resources
+            self.vadManager = nil
+            self.vadStreamState = nil
+
+            // Reset mode to idle
+            self.currentMode = .idle
+
+            // No callback to clear - using event emitting
+
+            // Keep the unified engine running for potential playback or quick restart
+            promise.resolve(withResult: ())
+        }
+
+        return promise
+    }
+
+    /**
+     * End the engine session and completely destroy all audio resources.
+     * This method performs a full teardown:
+     * - Ends any active recording segments
+     * - Stops all playback
+     * - Stops the audio engine
+     * - Deactivates the audio session (removes microphone indicator)
+     * - Destroys the engine instance (forces clean re-initialization)
+     *
+     * Call this when stopping a sleep session to ensure the microphone
+     * indicator disappears and all audio resources are released.
+     */
+    public func endEngineSession() throws -> Promise<Void> {
+        let promise = Promise<Void>()
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else {
+                promise.reject(withError: RuntimeError.error(withMessage: "Self is nil"))
+                return
+            }
+
+            self.bridgedLog("🔚 endEngineSession() - full teardown")
+
+            // Step 1: End any active recording segments
+            if self.currentSegmentFile != nil {
+                if let metadata = self.endCurrentSegmentWithoutCallback() {
+                    self.processAndFireSegmentCallback(metadata: metadata, trimSeconds: 0)
+                }
+            }
+
+            // Step 2: Stop all playback
+            self.currentPlayerNode?.stop()
+            self.audioPlayerNodeA?.stop()
+            self.audioPlayerNodeB?.stop()
+            self.audioPlayerNodeC?.stop()
+            self.audioPlayerNodeD?.stop()
+
+            // Step 3: Remove microphone tap
+            if let engine = self.audioEngine {
+                engine.inputNode.removeTap(onBus: 0)
+            }
+
+            // Step 4: Stop the audio engine
+            if let engine = self.audioEngine, engine.isRunning {
+                engine.stop()
+            }
+
+            // Step 5: Deactivate audio session (critical for removing mic indicator)
+            let audioSession = AVAudioSession.sharedInstance()
+            do {
+                try audioSession.setActive(false, options: .notifyOthersOnDeactivation)
+            } catch {
+                self.bridgedLog("⚠️ Failed to deactivate session: \(error.localizedDescription)")
+            }
+
+            // Step 6: Destroy engine instance (forces re-initialization on next session)
+            self.audioEngine = nil
+            self.audioPlayerNodeA = nil
+            self.audioPlayerNodeB = nil
+            self.audioPlayerNodeC = nil
+            self.audioPlayerNodeD = nil
+            self.audioEngineInitialized = false
+
+            // Step 7: Clean up recording resources
+            self.currentSegmentFile = nil
+            self.vadManager = nil
+            self.vadStreamState = nil
+
+            // Step 8: Reset playback state
+            self.currentPlayerNode = nil
+            self.currentAudioFile = nil
+            self.currentAmbientFile = nil
+            self.isAmbientLoopPlaying = false
+            self.shouldLoopPlayback = false
+            self.currentPlaybackURI = nil
+
+            // Step 9: Reset mode
+            self.currentMode = .idle
+
+            self.bridgedLog("✅ endEngineSession() completed")
+            promise.resolve(withResult: ())
+        }
+
+        return promise
+    }
+
+    // MARK: - Mode Control Methods
+
+    public func setManualMode() throws -> Promise<Void> {
+        let promise = Promise<Void>()
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else {
+                promise.reject(withError: RuntimeError.error(withMessage: "Self is nil"))
+                return
+            }
+
+            // Force close any existing segment (might be from auto detection)
+            if self.currentSegmentFile != nil {
+                self.currentSegmentFile = nil
+                self.segmentStartTime = nil
+            }
+
+            // Switch to manual mode (suppresses auto detection)
+            self.currentMode = .manual
+            self.currentSegmentIsManual = true
+            self.silenceFrameCount = 0
+            self.manualSilenceFrameCount = 0
+
+            self.bridgedLog("🚀🚀🚀 SUBMODULE TEST - Switched to manual mode 🚀🚀🚀")
+            promise.resolve(withResult: ())
+        }
+
+        return promise
+    }
+
+    public func startManualSegment(silenceTimeoutSeconds: Double?) throws -> Promise<Void> {
+        let promise = Promise<Void>()
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else {
+                promise.reject(withError: RuntimeError.error(withMessage: "Self is nil"))
+                return
+            }
+
+            // Verify we're in manual mode
+            guard self.currentMode == .manual else {
+                promise.reject(withError: RuntimeError.error(withMessage: "Not in manual mode. Call setManualMode() first."))
+                return
+            }
+
+            // If already recording a segment, stop it first
+            if self.currentSegmentFile != nil {
+                self.bridgedLog("⚠️ Stopping existing manual segment before starting new one")
+                self.endCurrentSegment()
+            }
+
+            // Verify target format is available
+            guard let targetFormat = self.targetFormat else {
+                promise.reject(withError: RuntimeError.error(withMessage: "Target format not initialized"))
+                return
+            }
+
+            // Configure silence timeout (default to 15 seconds if not provided)
+            let timeoutSeconds = silenceTimeoutSeconds ?? 15.0
+            self.manualSilenceThreshold = Int(timeoutSeconds * 14)  // ~14 fps from VAD analysis
+
+            // Reset silence counter
+            self.manualSilenceFrameCount = 0
+
+            // Start new manual segment
+            self.startNewSegment(with: targetFormat)
+            let now = Date()
+            let formatter = DateFormatter()
+            formatter.dateFormat = "HH:mm:ss.SSS"
+            self.bridgedLog("🎙️ Recording started at \(formatter.string(from: now)) (silence timeout: \(Int(timeoutSeconds))s)")
+
+            promise.resolve(withResult: ())
+        }
+
+        return promise
+    }
+
+    public func stopManualSegment() throws -> Promise<Void> {
+        let promise = Promise<Void>()
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else {
+                promise.reject(withError: RuntimeError.error(withMessage: "Self is nil"))
+                return
+            }
+
+            // End current segment if one exists
+            if self.currentSegmentFile != nil {
+                // Get metadata and process with trim + resample
+                if let metadata = self.endCurrentSegmentWithoutCallback() {
+                    // Use 0 seconds trim for manual stop (no silence to remove)
+                    self.processAndFireSegmentCallback(metadata: metadata, trimSeconds: 0)
+                }
+            }
+
+            // Stay in manual mode (as per user's answer)
+            promise.resolve(withResult: ())
+        }
+
+        return promise
+    }
+
+    public func setIdleMode() throws -> Promise<Void> {
+        let promise = Promise<Void>()
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else {
+                promise.reject(withError: RuntimeError.error(withMessage: "Self is nil"))
+                return
+            }
+
+            // End any current segment before switching to idle
+            if self.currentSegmentFile != nil {
+                self.bridgedLog("⚠️ Closing existing segment before idle mode")
+                self.endCurrentSegment()
+            }
+
+            // Switch to idle mode (keeps tap active for quick resume)
+            self.currentMode = .idle
+
+            promise.resolve(withResult: ())
+        }
+
+        return promise
+    }
+
+    public func setVADMode() throws -> Promise<Void> {
+        let promise = Promise<Void>()
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else {
+                promise.reject(withError: RuntimeError.error(withMessage: "Self is nil"))
+                return
+            }
+
+            // End any current segment before mode switch
+            if self.currentSegmentFile != nil {
+                self.bridgedLog("⚠️ Closing existing segment before VAD mode")
+                self.endCurrentSegment()
+            }
+
+            // Switch to autoVAD mode
+            self.currentMode = .autoVAD
+            self.silenceFrameCount = 0
+            self.currentSegmentIsManual = false
+
+            // Reset VAD state to fresh initial state (prevents false positives from stale data)
+            self.vadStreamState = VadStreamState.initial()
+
+            promise.resolve(withResult: ())
+        }
+
+        return promise
+    }
+
+    public func getCurrentMode() throws -> Promise<RecordingMode> {
+        let promise = Promise<RecordingMode>()
+        
+        // Return current mode (synchronous - just reading property)
+        // Convert Swift SegmentMode enum to RecordingMode type
+        let recordingMode: RecordingMode
+        switch self.currentMode {
+        case .idle:
+            recordingMode = RecordingMode(fromString: "idle")!
+        case .manual:
+            recordingMode = RecordingMode(fromString: "manual")!
+        case .autoVAD:
+            recordingMode = RecordingMode(fromString: "vad")!  // TypeScript uses 'vad', Swift uses 'autoVAD'
+        }
+        
+        promise.resolve(withResult: recordingMode)
+        return promise
+    }
+
+    public func isSegmentRecording() throws -> Promise<Bool> {
+        let promise = Promise<Bool>()
+
+        // Check if we're actively recording a segment
+        // This is the source of truth for recording state:
+        // 1. We have an open segment file (currentSegmentFile != nil)
+        // 2. We're in a recording mode (manual or autoVAD, not idle)
+        // 3. The audio engine is running (has active input tap)
+        let hasActiveSegment = self.currentSegmentFile != nil
+        let inRecordingMode = self.currentMode != .idle
+        let engineRunning = self.audioEngine?.isRunning ?? false
+
+        let isRecording = hasActiveSegment && inRecordingMode && engineRunning
+
+        promise.resolve(withResult: isRecording)
+        return promise
+    }
+
+    public func setVADThreshold(threshold: Double) throws -> Promise<Void> {
+        let promise = Promise<Void>()
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else {
+                promise.reject(withError: RuntimeError.error(withMessage: "Self is nil"))
+                return
+            }
+
+            // Validate threshold (0.0 to 1.0)
+            let clampedThreshold = max(0.0, min(1.0, threshold))
+            self.vadThreshold = Float(clampedThreshold)
+
+            promise.resolve(withResult: ())
+        }
+
+        return promise
+    }
+
+
+    // MARK: - Audio Format Conversion
+
+    /// Converts a buffer from hardware sample rate (e.g., 48kHz) to 16kHz for VAD processing
+    private func convertTo16kHz(_ buffer: AVAudioPCMBuffer) -> AVAudioPCMBuffer? {
+        guard let converter = self.audioConverter,
+              let targetFormat = self.targetFormat else {
+            return nil
+        }
+
+        // Calculate output frame capacity based on sample rate ratio
+        let sampleRateRatio = targetFormat.sampleRate / buffer.format.sampleRate
+        let outputFrameCapacity = AVAudioFrameCount(Double(buffer.frameLength) * sampleRateRatio)
+
+        // Create output buffer at target format (16kHz)
+        guard let outputBuffer = AVAudioPCMBuffer(
+            pcmFormat: targetFormat,
+            frameCapacity: outputFrameCapacity
+        ) else {
+            return nil
+        }
+
+        var error: NSError?
+        let inputBlock: AVAudioConverterInputBlock = { inNumPackets, outStatus in
+            outStatus.pointee = .haveData
+            return buffer
+        }
+
+        converter.convert(to: outputBuffer, error: &error, withInputFrom: inputBlock)
+
+        if let error = error {
+            self.bridgedLog("⚠️ Conversion error: \(error.localizedDescription)")
+            return nil
+        }
+
+        return outputBuffer
+    }
+
+    // MARK: - Player Node Helpers
+
+    private func getCurrentPlayerNode() -> AVAudioPlayerNode? {
+        // For now, always use player A. Later we can implement switching for crossfading
+        switch activePlayer {
+        case .playerA:
+            return audioPlayerNodeA
+        case .playerB:
+            return audioPlayerNodeB
+        case .playerC:
+            return audioPlayerNodeC
+        case .none:
+            // Default to player A for first use
+            activePlayer = .playerA
+            return audioPlayerNodeA
+        }
+    }
+
+    private func getPlayerEnum(for node: AVAudioPlayerNode?) -> ActivePlayer {
+        guard let node = node else { return .none }
+        if node === audioPlayerNodeA { return .playerA }
+        if node === audioPlayerNodeB { return .playerB }
+        if node === audioPlayerNodeC { return .playerC }
+        return .none
+    }
+
+    private func getNodeName(for node: AVAudioPlayerNode?) -> String {
+        guard let node = node else { return "NONE" }
+        if node === audioPlayerNodeA { return "A" }
+        if node === audioPlayerNodeB { return "B" }
+        if node === audioPlayerNodeC { return "C" }
+        if node === audioPlayerNodeD { return "D (Ambient)" }
+        return "UNKNOWN"
+    }
+
+    // MARK: - Playback Completion Helpers
+
+    private func handlePlaybackCompletion() {
+        if let audioFile = self.currentAudioFile {
+            let durationSeconds = Double(audioFile.length) / audioFile.fileFormat.sampleRate
+            let durationMs = durationSeconds * 1000
+            self.emitPlaybackEndEvents(durationMs: durationMs, includePlaybackUpdate: true)
+        }
+
+        self.stopPlayTimer()
+        self.currentPlayerNode = nil
+    }
+
+    private func scheduleMoreLoops(audioFile: AVAudioFile, playerNode: AVAudioPlayerNode) {
+        guard self.shouldLoopPlayback else {
+            return
+        }
+
+        // Schedule 3 more iterations
+        playerNode.scheduleFile(audioFile, at: nil, completionHandler: nil)
+        playerNode.scheduleFile(audioFile, at: nil, completionHandler: nil)
+        playerNode.scheduleFile(audioFile, at: nil) { [weak self] in
+            // Recursive scheduling for continuous looping
+            self?.scheduleMoreLoops(audioFile: audioFile, playerNode: playerNode)
+        }
+    }
+
+    private func scheduleMoreAmbientLoops(audioFile: AVAudioFile, playerNode: AVAudioPlayerNode) {
+        guard self.isAmbientLoopPlaying else {
+            return
+        }
+
+        // Schedule 3 more iterations
+        playerNode.scheduleFile(audioFile, at: nil, completionHandler: nil)
+        playerNode.scheduleFile(audioFile, at: nil, completionHandler: nil)
+        playerNode.scheduleFile(audioFile, at: nil) { [weak self] in
+            // Recursive scheduling for continuous looping
+            self?.scheduleMoreAmbientLoops(audioFile: audioFile, playerNode: playerNode)
+        }
     }
 
     // MARK: - Now Playing (Lock Screen Controls)
@@ -998,49 +1592,49 @@ import MediaPlayer
 
     }
 
-        // Replace your existing startNewSegment() with this version:
-private func startNewSegment(with tapFormat: AVAudioFormat) {
-    guard let outputDir = outputDirectory else {
-        bridgedLog("⚠️ Cannot start segment: output directory not set")
-        return
-    }
-
-    segmentCounter += 1
-    // Use sessionTimestamp for unique filenames across app restarts
-    let filename = String(format: "speech_%lld_%03d.wav", sessionTimestamp, segmentCounter)
-    let fileURL = outputDir.appendingPathComponent(filename)
-
-    // Track start time
-    segmentStartTime = Date()
-
-    do {
-        currentSegmentFile = try AVAudioFile(
-            forWriting: fileURL,
-            settings: tapFormat.settings
-        )
-
-        let isManual = currentSegmentIsManual
-
-        // Pre-roll: flush ~3s of buffered audio into AUTO segments only
-        // Manual segments start recording immediately without pre-roll
-        if !isManual, let rollingBuffer = rollingBuffer {
-            let preRollBuffers = rollingBuffer.getPreRollBuffers()
-            for buffer in preRollBuffers {
-                try currentSegmentFile?.write(from: buffer)
-            }
-            rollingBuffer.clear()
-        } else if isManual {
-            // Clear buffer for manual segments but don't write them
-            rollingBuffer?.clear()
+    // Replace your existing startNewSegment() with this version:
+    private func startNewSegment(with tapFormat: AVAudioFormat) {
+        guard let outputDir = outputDirectory else {
+            bridgedLog("⚠️ Cannot start segment: output directory not set")
+            return
         }
 
-        silenceCounter = 0
+        segmentCounter += 1
+        // Use sessionTimestamp for unique filenames across app restarts
+        let filename = String(format: "speech_%lld_%03d.wav", sessionTimestamp, segmentCounter)
+        let fileURL = outputDir.appendingPathComponent(filename)
 
-    } catch {
-        bridgedLog("❌ Failed to create speech segment: \(error.localizedDescription)")
-        currentSegmentFile = nil
+        // Track start time
+        segmentStartTime = Date()
+
+        do {
+            currentSegmentFile = try AVAudioFile(
+                forWriting: fileURL,
+                settings: tapFormat.settings
+            )
+
+            let isManual = currentSegmentIsManual
+
+            // Pre-roll: flush ~3s of buffered audio into AUTO segments only
+            // Manual segments start recording immediately without pre-roll
+            if !isManual, let rollingBuffer = rollingBuffer {
+                let preRollBuffers = rollingBuffer.getPreRollBuffers()
+                for buffer in preRollBuffers {
+                    try currentSegmentFile?.write(from: buffer)
+                }
+                rollingBuffer.clear()
+            } else if isManual {
+                // Clear buffer for manual segments but don't write them
+                rollingBuffer?.clear()
+            }
+
+            silenceCounter = 0
+
+        } catch {
+            bridgedLog("❌ Failed to create speech segment: \(error.localizedDescription)")
+            currentSegmentFile = nil
+        }
     }
-}
 
     /// Ends the current segment and returns metadata for later callback
     /// Use this when you need to process the audio file before firing the callback
@@ -1146,592 +1740,6 @@ private func startNewSegment(with tapFormat: AVAudioFormat) {
 
             self.silenceCounter = 0
         }
-    }
-
-    private func setupRecording(promise: Promise<Void>) {
-        do {
-            guard let engine = self.audioEngine else {
-                bridgedLog("❌ setupRecording: Audio engine is nil")
-                promise.reject(withError: RuntimeError.error(withMessage: "Unified audio engine not initialized"))
-                return
-            }
-
-            if !engine.isRunning {
-                throw RuntimeError.error(withMessage: "Audio engine is not running")
-            }
-
-            // Initialize session timestamp for unique filenames (milliseconds since epoch)
-            self.sessionTimestamp = Int64(Date().timeIntervalSince1970 * 1000)
-            self.segmentCounter = 0
-
-            let inputNode = engine.inputNode
-            let hwFormat = inputNode.outputFormat(forBus: 0)
-
-            // Create target format for VAD (16kHz mono)
-            guard let target16kHzFormat = AVAudioFormat(
-                commonFormat: .pcmFormatFloat32,
-                sampleRate: 16000,
-                channels: 1,
-                interleaved: false
-            ) else {
-                throw RuntimeError.error(withMessage: "Failed to create 16kHz target format")
-            }
-
-            self.targetFormat = target16kHzFormat
-
-            // Create audio converter from hardware rate → 16kHz
-            guard let converter = AVAudioConverter(from: hwFormat, to: target16kHzFormat) else {
-                throw RuntimeError.error(withMessage: "Failed to create audio converter from \(Int(hwFormat.sampleRate))Hz to 16kHz")
-            }
-            self.audioConverter = converter
-
-            // Remove any existing taps
-            inputNode.removeTap(onBus: 0)
-
-            // Init rolling buffer for pre-roll
-            rollingBuffer = RollingAudioBuffer()
-
-            // Set mode to idle FIRST (before VAD initialization)
-            self.currentMode = .idle
-
-            // Initialize VAD components asynchronously (non-blocking)
-            Task {
-                do {
-                    let vadConfig = VadConfig(threshold: self.vadThreshold)
-                    self.vadManager = try await VadManager(config: vadConfig)
-                    self.vadStreamState = VadStreamState.initial()
-                } catch {
-                    self.bridgedLog("⚠️ VAD init failed, using fallback")
-                }
-            }
-
-            // Set default output directory if needed
-            if outputDirectory == nil {
-                let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-                outputDirectory = documentsURL.appendingPathComponent("speech_segments")
-            }
-            if let outputDir = outputDirectory {
-                try FileManager.default.createDirectory(at: outputDir, withIntermediateDirectories: true)
-            }
-
-            // Install tap using HARDWARE format (not 16kHz)
-            // We'll convert buffers to 16kHz inside the callback
-            inputNode.installTap(onBus: 0, bufferSize: 1024, format: hwFormat) { [weak self] buffer, time in
-                guard let self = self else { return }
-
-                self.tapFrameCounter += 1
-
-                // Convert buffer from hardware rate (48kHz) to 16kHz for VAD
-                guard let converted16kHzBuffer = self.convertTo16kHz(buffer) else {
-                    return
-                }
-
-                // VAD-based speech detection - ONLY when needed
-                var audioIsLoud = false
-
-                // Only compute VAD if we're in autoVAD mode, or in manual mode with active segment
-                if self.currentMode == .autoVAD || (self.currentMode == .manual && self.currentSegmentFile != nil) {
-                    if let vadMgr = self.vadManager,
-                       let vadState = self.vadStreamState {
-
-                        // Extract Float array from CONVERTED 16kHz buffer SYNCHRONOUSLY
-                        // Check if buffer has valid float channel data
-                        if let floatChannelData = converted16kHzBuffer.floatChannelData,
-                           floatChannelData[0] != nil {
-                            // Valid buffer - process VAD
-                            let frameLength = Int(converted16kHzBuffer.frameLength)
-                            let samples = Array(UnsafeBufferPointer(start: floatChannelData[0], count: frameLength))
-
-                            // Process VAD asynchronously (runs in background) with COPIED samples
-                            Task {
-                                do {
-                                    // Use public streaming API with the samples we copied above
-                                    // Custom VAD config optimized for whisper detection (FluidAudio recommended)
-                                    let customConfig = VadSegmentationConfig(
-                                        minSpeechDuration: 0.05,         // Catches brief whispers (FluidAudio recommended)
-                                        minSilenceDuration: 0.3,         // More tolerant of pauses (FluidAudio recommended)
-                                        maxSpeechDuration: 14.0,         // Keep default
-                                        speechPadding: 0.05,             // Must be <= minSpeechDuration (0.05)
-                                        silenceThresholdForSplit: 0.3,   // Keep default
-                                        negativeThreshold: 0.05,         // Explicit hysteresis for fading speech (FluidAudio recommended 0.03-0.08)
-                                        negativeThresholdOffset: 0.10,   // 0.10 instead of 0.15 - tighter hysteresis
-                                        minSilenceAtMaxSpeech: 0.098,    // Keep default
-                                        useMaxPossibleSilenceAtMaxSpeech: true  // Keep default
-                                    )
-
-                                    let streamResult = try await vadMgr.processStreamingChunk(
-                                        samples,
-                                        state: vadState,
-                                        config: customConfig
-                                    )
-
-                                    // Update state for next chunk
-                                    self.vadStreamState = streamResult.state
-                                } catch {
-                                    // VAD processing error - state stays at previous value (silent fail)
-                                }
-                            }
-
-                            // Use triggered state from most recent VAD result
-                            audioIsLoud = vadState.triggered
-                        } else {
-                            // Buffer data is invalid - log and skip VAD for this frame
-                            // if self.tapFrameCounter % 100 == 0 {
-                            //     self.bridgedLog("⚠️ Frame \(self.tapFrameCounter): Invalid floatChannelData, skipping VAD (audioIsLoud stays false)")
-                            // }
-                            // audioIsLoud stays false - continue with normal buffer writing below
-                        }
-
-                    } else {
-                        // VAD not initialized yet - log this condition
-                        if self.tapFrameCounter % 200 == 0 {
-                            let vadMgrExists = (self.vadManager != nil)
-                            let vadStateExists = (self.vadStreamState != nil)
-                            self.bridgedLog("⚠️ Frame \(self.tapFrameCounter): VAD not ready (vadMgr: \(vadMgrExists), vadState: \(vadStateExists))")
-                        }
-                        // audioIsLoud stays false - no fallback available
-                    }
-
-                    // Log final audioIsLoud value periodically
-                    // if self.tapFrameCounter % 100 == 0 {
-                    //     self.bridgedLog("🔊 Frame \(self.tapFrameCounter): audioIsLoud = \(audioIsLoud)")
-                    // }
-                }
-                // In idle mode, audioIsLoud stays false - no processing
-
-                // Pre-roll - write CONVERTED 16kHz buffer (not raw hardware buffer)
-                // Only write buffer in autoVAD mode, or in manual mode when segment is active
-                if self.currentMode == .autoVAD || (self.currentMode == .manual && self.currentSegmentFile != nil) {
-                    self.rollingBuffer?.write(converted16kHzBuffer)
-                }
-
-                // Segment handling - only run automatic detection if in autoVAD mode
-                if self.currentMode == .autoVAD {
-                    let isCurrentlyRecordingSegment = self.currentSegmentFile != nil
-                    if audioIsLoud {
-                        if !isCurrentlyRecordingSegment {
-                            self.currentSegmentIsManual = false
-                            // Use target 16kHz format for file writing
-                            if let targetFormat = self.targetFormat {
-                                self.startNewSegment(with: targetFormat)
-                            } else {
-                                self.bridgedLog("⚠️ Cannot start segment: targetFormat is nil!")
-                            }
-                        }
-                        self.silenceFrameCount = 0
-                    } else if isCurrentlyRecordingSegment {
-                        self.silenceFrameCount += 1
-                        if self.silenceFrameCount >= 50 {
-                            // Use same processing pipeline as manual segments (trim + resample)
-                            if let metadata = self.endCurrentSegmentWithoutCallback() {
-                                // No trim needed for auto segments (0 seconds)
-                                self.processAndFireSegmentCallback(metadata: metadata, trimSeconds: 0)
-                            }
-                            self.silenceFrameCount = 0
-                        }
-                    }
-                } else if self.currentMode == .manual && self.currentSegmentFile != nil {
-                    // In manual mode with active segment, detect silence for automatic progression
-                    if audioIsLoud {
-                        // Reset silence counter on speech
-                        self.manualSilenceFrameCount = 0
-                    } else {
-                        // Increment silence counter
-                        self.manualSilenceFrameCount += 1
-
-                        // Log every ~1 second (14 frames) to show detection is running
-                        if self.manualSilenceFrameCount % 14 == 0 {
-                            let elapsed = self.manualSilenceFrameCount / 14
-                            let total = self.manualSilenceThreshold / 14
-                            self.bridgedLog("🔇 Listening... \(elapsed)/\(total)s silence")
-                        }
-
-                        if self.manualSilenceFrameCount >= self.manualSilenceThreshold {
-                            let endTime = Date()
-                            let formatter = DateFormatter()
-                            formatter.dateFormat = "HH:mm:ss.SSS"
-                            self.bridgedLog("🛑 Recording ended at \(formatter.string(from: endTime)) (silence timeout reached)")
-
-                            self.manualSilenceFrameCount = 0  // Reset counter
-
-                            // Close segment and get metadata (NO callback yet)
-                            guard let metadata = self.endCurrentSegmentWithoutCallback() else {
-                                return
-                            }
-
-                            // Process the audio file (trim silence, then resample) and fire callback
-                            let silenceDurationSeconds = Double(self.manualSilenceThreshold) / 14.0
-
-                            // Don't trim for voice command segments (1s timeout)
-                            // Only trim for longer segments like dreams (15s timeout)
-                            let shouldTrim = silenceDurationSeconds > 2.0  // If timeout > 2s, it's a dream segment
-                            let trimAmount = shouldTrim ? silenceDurationSeconds : 0.0
-
-                            self.processAndFireSegmentCallback(metadata: metadata, trimSeconds: trimAmount)
-
-                            // Notify JavaScript via callback
-                            if let callback = self.manualSilenceCallback {
-                                DispatchQueue.main.async {
-                                    callback()
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Write to file ONLY if recording a segment AND not in idle mode
-                // Write the CONVERTED 16kHz buffer (not the raw hardware buffer)
-                if self.currentMode != .idle, let segmentFile = self.currentSegmentFile {
-                    do {
-                        try segmentFile.write(from: converted16kHzBuffer)
-                    } catch {
-                        // Silent fail to avoid log spam
-                    }
-                }
-            }
-
-            promise.resolve(withResult: ())
-
-        } catch {
-            bridgedLog("❌ RECORDING: Setup failed - \(error.localizedDescription)")
-            promise.reject(withError: RuntimeError.error(withMessage: "Recording setup failed: \(error.localizedDescription)"))
-        }
-    }
-
-    public func stopRecorder() throws -> Promise<Void> {
-        let promise = Promise<Void>()
-
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self = self else {
-                promise.reject(withError: RuntimeError.error(withMessage: "Self is nil"))
-                return
-            }
-
-            // End any current segment before stopping
-            if self.currentSegmentFile != nil {
-                // Get metadata and process with trim + resample
-                if let metadata = self.endCurrentSegmentWithoutCallback() {
-                    // Use 0 seconds trim for manual stop (no silence to remove)
-                    self.processAndFireSegmentCallback(metadata: metadata, trimSeconds: 0)
-                }
-            }
-
-            // Remove tap from unified engine's input node
-            if let engine = self.audioEngine {
-                engine.inputNode.removeTap(onBus: 0)
-            }
-
-            // Clean up VAD resources
-            self.vadManager = nil
-            self.vadStreamState = nil
-
-            // Reset mode to idle
-            self.currentMode = .idle
-
-            // No callback to clear - using event emitting
-
-            // Keep the unified engine running for potential playback or quick restart
-            promise.resolve(withResult: ())
-        }
-
-        return promise
-    }
-
-    /**
-     * End the engine session and completely destroy all audio resources.
-     * This method performs a full teardown:
-     * - Ends any active recording segments
-     * - Stops all playback
-     * - Stops the audio engine
-     * - Deactivates the audio session (removes microphone indicator)
-     * - Destroys the engine instance (forces clean re-initialization)
-     *
-     * Call this when stopping a sleep session to ensure the microphone
-     * indicator disappears and all audio resources are released.
-     */
-    public func endEngineSession() throws -> Promise<Void> {
-        let promise = Promise<Void>()
-
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self = self else {
-                promise.reject(withError: RuntimeError.error(withMessage: "Self is nil"))
-                return
-            }
-
-            self.bridgedLog("🔚 endEngineSession() - full teardown")
-
-            // Step 1: End any active recording segments
-            if self.currentSegmentFile != nil {
-                if let metadata = self.endCurrentSegmentWithoutCallback() {
-                    self.processAndFireSegmentCallback(metadata: metadata, trimSeconds: 0)
-                }
-            }
-
-            // Step 2: Stop all playback
-            self.currentPlayerNode?.stop()
-            self.audioPlayerNodeA?.stop()
-            self.audioPlayerNodeB?.stop()
-            self.audioPlayerNodeC?.stop()
-            self.audioPlayerNodeD?.stop()
-
-            // Step 3: Remove microphone tap
-            if let engine = self.audioEngine {
-                engine.inputNode.removeTap(onBus: 0)
-            }
-
-            // Step 4: Stop the audio engine
-            if let engine = self.audioEngine, engine.isRunning {
-                engine.stop()
-            }
-
-            // Step 5: Deactivate audio session (critical for removing mic indicator)
-            let audioSession = AVAudioSession.sharedInstance()
-            do {
-                try audioSession.setActive(false, options: .notifyOthersOnDeactivation)
-            } catch {
-                self.bridgedLog("⚠️ Failed to deactivate session: \(error.localizedDescription)")
-            }
-
-            // Step 6: Destroy engine instance (forces re-initialization on next session)
-            self.audioEngine = nil
-            self.audioPlayerNodeA = nil
-            self.audioPlayerNodeB = nil
-            self.audioPlayerNodeC = nil
-            self.audioPlayerNodeD = nil
-            self.audioEngineInitialized = false
-
-            // Step 7: Clean up recording resources
-            self.currentSegmentFile = nil
-            self.vadManager = nil
-            self.vadStreamState = nil
-
-            // Step 8: Reset playback state
-            self.currentPlayerNode = nil
-            self.currentAudioFile = nil
-            self.currentAmbientFile = nil
-            self.isAmbientLoopPlaying = false
-            self.shouldLoopPlayback = false
-            self.currentPlaybackURI = nil
-
-            // Step 9: Reset mode
-            self.currentMode = .idle
-
-            self.bridgedLog("✅ endEngineSession() completed")
-            promise.resolve(withResult: ())
-        }
-
-        return promise
-    }
-
-    // MARK: - Mode Control Methods
-
-    public func setManualMode() throws -> Promise<Void> {
-        let promise = Promise<Void>()
-
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self = self else {
-                promise.reject(withError: RuntimeError.error(withMessage: "Self is nil"))
-                return
-            }
-
-            // Force close any existing segment (might be from auto detection)
-            if self.currentSegmentFile != nil {
-                self.currentSegmentFile = nil
-                self.segmentStartTime = nil
-            }
-
-            // Switch to manual mode (suppresses auto detection)
-            self.currentMode = .manual
-            self.currentSegmentIsManual = true
-            self.silenceFrameCount = 0
-            self.manualSilenceFrameCount = 0
-
-            self.bridgedLog("🚀🚀🚀 SUBMODULE TEST - Switched to manual mode 🚀🚀🚀")
-            promise.resolve(withResult: ())
-        }
-
-        return promise
-    }
-
-    public func startManualSegment(silenceTimeoutSeconds: Double?) throws -> Promise<Void> {
-        let promise = Promise<Void>()
-
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self = self else {
-                promise.reject(withError: RuntimeError.error(withMessage: "Self is nil"))
-                return
-            }
-
-            // Verify we're in manual mode
-            guard self.currentMode == .manual else {
-                promise.reject(withError: RuntimeError.error(withMessage: "Not in manual mode. Call setManualMode() first."))
-                return
-            }
-
-            // If already recording a segment, stop it first
-            if self.currentSegmentFile != nil {
-                self.bridgedLog("⚠️ Stopping existing manual segment before starting new one")
-                self.endCurrentSegment()
-            }
-
-            // Verify target format is available
-            guard let targetFormat = self.targetFormat else {
-                promise.reject(withError: RuntimeError.error(withMessage: "Target format not initialized"))
-                return
-            }
-
-            // Configure silence timeout (default to 15 seconds if not provided)
-            let timeoutSeconds = silenceTimeoutSeconds ?? 15.0
-            self.manualSilenceThreshold = Int(timeoutSeconds * 14)  // ~14 fps from VAD analysis
-
-            // Reset silence counter
-            self.manualSilenceFrameCount = 0
-
-            // Start new manual segment
-            self.startNewSegment(with: targetFormat)
-            let now = Date()
-            let formatter = DateFormatter()
-            formatter.dateFormat = "HH:mm:ss.SSS"
-            self.bridgedLog("🎙️ Recording started at \(formatter.string(from: now)) (silence timeout: \(Int(timeoutSeconds))s)")
-
-            promise.resolve(withResult: ())
-        }
-
-        return promise
-    }
-
-    public func stopManualSegment() throws -> Promise<Void> {
-        let promise = Promise<Void>()
-
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self = self else {
-                promise.reject(withError: RuntimeError.error(withMessage: "Self is nil"))
-                return
-            }
-
-            // End current segment if one exists
-            if self.currentSegmentFile != nil {
-                // Get metadata and process with trim + resample
-                if let metadata = self.endCurrentSegmentWithoutCallback() {
-                    // Use 0 seconds trim for manual stop (no silence to remove)
-                    self.processAndFireSegmentCallback(metadata: metadata, trimSeconds: 0)
-                }
-            }
-
-            // Stay in manual mode (as per user's answer)
-            promise.resolve(withResult: ())
-        }
-
-        return promise
-    }
-
-    public func setIdleMode() throws -> Promise<Void> {
-        let promise = Promise<Void>()
-
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self = self else {
-                promise.reject(withError: RuntimeError.error(withMessage: "Self is nil"))
-                return
-            }
-
-            // End any current segment before switching to idle
-            if self.currentSegmentFile != nil {
-                self.bridgedLog("⚠️ Closing existing segment before idle mode")
-                self.endCurrentSegment()
-            }
-
-            // Switch to idle mode (keeps tap active for quick resume)
-            self.currentMode = .idle
-
-            promise.resolve(withResult: ())
-        }
-
-        return promise
-    }
-
-    public func setVADMode() throws -> Promise<Void> {
-        let promise = Promise<Void>()
-
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self = self else {
-                promise.reject(withError: RuntimeError.error(withMessage: "Self is nil"))
-                return
-            }
-
-            // End any current segment before mode switch
-            if self.currentSegmentFile != nil {
-                self.bridgedLog("⚠️ Closing existing segment before VAD mode")
-                self.endCurrentSegment()
-            }
-
-            // Switch to autoVAD mode
-            self.currentMode = .autoVAD
-            self.silenceFrameCount = 0
-            self.currentSegmentIsManual = false
-
-            // Reset VAD state to fresh initial state (prevents false positives from stale data)
-            self.vadStreamState = VadStreamState.initial()
-
-            promise.resolve(withResult: ())
-        }
-
-        return promise
-    }
-
-    public func getCurrentMode() throws -> Promise<RecordingMode> {
-        let promise = Promise<RecordingMode>()
-        
-        // Return current mode (synchronous - just reading property)
-        // Convert Swift SegmentMode enum to RecordingMode type
-        let recordingMode: RecordingMode
-        switch self.currentMode {
-        case .idle:
-            recordingMode = RecordingMode(fromString: "idle")!
-        case .manual:
-            recordingMode = RecordingMode(fromString: "manual")!
-        case .autoVAD:
-            recordingMode = RecordingMode(fromString: "vad")!  // TypeScript uses 'vad', Swift uses 'autoVAD'
-        }
-        
-        promise.resolve(withResult: recordingMode)
-        return promise
-    }
-
-    public func isSegmentRecording() throws -> Promise<Bool> {
-        let promise = Promise<Bool>()
-
-        // Check if we're actively recording a segment
-        // This is the source of truth for recording state:
-        // 1. We have an open segment file (currentSegmentFile != nil)
-        // 2. We're in a recording mode (manual or autoVAD, not idle)
-        // 3. The audio engine is running (has active input tap)
-        let hasActiveSegment = self.currentSegmentFile != nil
-        let inRecordingMode = self.currentMode != .idle
-        let engineRunning = self.audioEngine?.isRunning ?? false
-
-        let isRecording = hasActiveSegment && inRecordingMode && engineRunning
-
-        promise.resolve(withResult: isRecording)
-        return promise
-    }
-
-    public func setVADThreshold(threshold: Double) throws -> Promise<Void> {
-        let promise = Promise<Void>()
-
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self = self else {
-                promise.reject(withError: RuntimeError.error(withMessage: "Self is nil"))
-                return
-            }
-
-            // Validate threshold (0.0 to 1.0)
-            let clampedThreshold = max(0.0, min(1.0, threshold))
-            self.vadThreshold = Float(clampedThreshold)
-
-            promise.resolve(withResult: ())
-        }
-
-        return promise
     }
 
     // MARK: - Playback Methods
