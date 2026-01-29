@@ -17,14 +17,11 @@ public protocol HybridSoundSpec_protocol: HybridObject {
   func startRecorder() throws -> Promise<Void>
   func stopRecorder() throws -> Promise<Void>
   func endEngineSession() throws -> Promise<Void>
-  func initializePlaybackOnly() throws -> Promise<Void>
-  func endPlaybackOnlySession() throws -> Promise<Void>
   func setVADMode() throws -> Promise<Void>
   func setManualMode() throws -> Promise<Void>
   func setIdleMode() throws -> Promise<Void>
   func getCurrentMode() throws -> Promise<RecordingMode>
   func isSegmentRecording() throws -> Promise<Bool>
-  func isInPlaybackOnlyMode() throws -> Bool
   func startManualSegment(silenceTimeoutSeconds: Double?) throws -> Promise<Void>
   func stopManualSegment() throws -> Promise<Void>
   func setVADThreshold(threshold: Double) throws -> Promise<Void>

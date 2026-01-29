@@ -104,36 +104,6 @@ namespace margelo::nitro::sound {
       return __promise;
     }();
   }
-  std::shared_ptr<Promise<void>> JHybridSoundSpec::initializePlaybackOnly() {
-    static const auto method = javaClassStatic()->getMethod<jni::local_ref<JPromise::javaobject>()>("initializePlaybackOnly");
-    auto __result = method(_javaPart);
-    return [&]() {
-      auto __promise = Promise<void>::create();
-      __result->cthis()->addOnResolvedListener([=](const jni::alias_ref<jni::JObject>& /* unit */) {
-        __promise->resolve();
-      });
-      __result->cthis()->addOnRejectedListener([=](const jni::alias_ref<jni::JThrowable>& __throwable) {
-        jni::JniException __jniError(__throwable);
-        __promise->reject(std::make_exception_ptr(__jniError));
-      });
-      return __promise;
-    }();
-  }
-  std::shared_ptr<Promise<void>> JHybridSoundSpec::endPlaybackOnlySession() {
-    static const auto method = javaClassStatic()->getMethod<jni::local_ref<JPromise::javaobject>()>("endPlaybackOnlySession");
-    auto __result = method(_javaPart);
-    return [&]() {
-      auto __promise = Promise<void>::create();
-      __result->cthis()->addOnResolvedListener([=](const jni::alias_ref<jni::JObject>& /* unit */) {
-        __promise->resolve();
-      });
-      __result->cthis()->addOnRejectedListener([=](const jni::alias_ref<jni::JThrowable>& __throwable) {
-        jni::JniException __jniError(__throwable);
-        __promise->reject(std::make_exception_ptr(__jniError));
-      });
-      return __promise;
-    }();
-  }
   std::shared_ptr<Promise<void>> JHybridSoundSpec::setVADMode() {
     static const auto method = javaClassStatic()->getMethod<jni::local_ref<JPromise::javaobject>()>("setVADMode");
     auto __result = method(_javaPart);
@@ -210,11 +180,6 @@ namespace margelo::nitro::sound {
       });
       return __promise;
     }();
-  }
-  bool JHybridSoundSpec::isInPlaybackOnlyMode() {
-    static const auto method = javaClassStatic()->getMethod<jboolean()>("isInPlaybackOnlyMode");
-    auto __result = method(_javaPart);
-    return static_cast<bool>(__result);
   }
   std::shared_ptr<Promise<void>> JHybridSoundSpec::startManualSegment(std::optional<double> silenceTimeoutSeconds) {
     static const auto method = javaClassStatic()->getMethod<jni::local_ref<JPromise::javaobject>(jni::alias_ref<jni::JDouble> /* silenceTimeoutSeconds */)>("startManualSegment");

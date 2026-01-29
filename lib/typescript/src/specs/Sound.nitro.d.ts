@@ -65,24 +65,6 @@ export interface Sound extends HybridObject<{
      * indicator disappears and all audio resources are released.
      */
     endEngineSession(): Promise<void>;
-    /**
-     * Initialize audio engine in playback-only mode (no microphone access).
-     * Used for standalone alarm mode when no session is running.
-     *
-     * IMPORTANT: This uses .playback category instead of .playAndRecord,
-     * so NO microphone indicator will be shown.
-     *
-     * Use endPlaybackOnlySession() to teardown - NOT endEngineSession()
-     * which would crash trying to access inputNode.
-     */
-    initializePlaybackOnly(): Promise<void>;
-    /**
-     * End playback-only session - safe teardown without inputNode access.
-     *
-     * Use this to teardown after initializePlaybackOnly(). If you used
-     * startRecorder() (with .playAndRecord), use endEngineSession() instead.
-     */
-    endPlaybackOnlySession(): Promise<void>;
     setVADMode(): Promise<void>;
     setManualMode(): Promise<void>;
     setIdleMode(): Promise<void>;
@@ -100,15 +82,6 @@ export interface Sound extends HybridObject<{
      * @returns true if actively recording a segment, false otherwise
      */
     isSegmentRecording(): Promise<boolean>;
-    /**
-     * Check if the audio engine is in playback-only mode (no recording available).
-     * This happens after an audio interruption (e.g., phone call) when PlayAndRecord
-     * restart fails from background - we fall back to playback-only to keep white noise
-     * and alarm working, but recording is unavailable until the app comes to foreground.
-     *
-     * @returns true if in playback-only mode (recording unavailable), false if recording is available
-     */
-    isInPlaybackOnlyMode(): boolean;
     startManualSegment(silenceTimeoutSeconds?: number): Promise<void>;
     stopManualSegment(): Promise<void>;
     setVADThreshold(threshold: number): Promise<void>;

@@ -56,14 +56,11 @@ namespace margelo::nitro::sound {
     std::shared_ptr<Promise<void>> startRecorder() override;
     std::shared_ptr<Promise<void>> stopRecorder() override;
     std::shared_ptr<Promise<void>> endEngineSession() override;
-    std::shared_ptr<Promise<void>> initializePlaybackOnly() override;
-    std::shared_ptr<Promise<void>> endPlaybackOnlySession() override;
     std::shared_ptr<Promise<void>> setVADMode() override;
     std::shared_ptr<Promise<void>> setManualMode() override;
     std::shared_ptr<Promise<void>> setIdleMode() override;
     std::shared_ptr<Promise<RecordingMode>> getCurrentMode() override;
     std::shared_ptr<Promise<bool>> isSegmentRecording() override;
-    bool isInPlaybackOnlyMode() override;
     std::shared_ptr<Promise<void>> startManualSegment(std::optional<double> silenceTimeoutSeconds) override;
     std::shared_ptr<Promise<void>> stopManualSegment() override;
     std::shared_ptr<Promise<void>> setVADThreshold(double threshold) override;
