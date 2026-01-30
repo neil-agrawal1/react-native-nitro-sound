@@ -334,7 +334,7 @@ final class HybridSound: HybridSoundSpec_base, HybridSoundSpec_protocol, SNResul
         // Extract interruption reason (iOS 14.5+)
         var reasonString = "unknown"
         if #available(iOS 14.5, *) {
-            if let reasonValue = userInfo[AVAudioSession.interruptionReasonKey] as? UInt,
+            if let reasonValue = userInfo[AVAudioSessionInterruptionReasonKey] as? UInt,
                let reason = AVAudioSession.InterruptionReason(rawValue: reasonValue) {
                 switch reason {
                 case .default:
@@ -344,32 +344,22 @@ final class HybridSound: HybridSoundSpec_base, HybridSoundSpec_protocol, SNResul
                 case .builtInMicMuted:
                     reasonString = "built-in mic muted (iPad)"
                 @unknown default:
-                    reasonString = "unknown reason (\(reasonValue))"
+                    reasonString = "unknown (\(reasonValue))"
                 }
             }
         }
 
-        // Check if app was suspended (iOS 14+)
-        var wasSuspended = false
-        if #available(iOS 14.0, *) {
-            wasSuspended = (userInfo[AVAudioSession.interruptionWasSuspendedKey] as? Bool) ?? false
-        }
-
         if type == .ended {
-            // Check if we should resume (iOS tells us via interruption options)
             let shouldResume = (userInfo[AVAudioSessionInterruptionOptionKey] as? UInt) == AVAudioSession.InterruptionOptions.shouldResume.rawValue
 
             bridgedLog("🔊 AUDIO INTERRUPTION ENDED")
             bridgedLog("   Reason: \(reasonString)")
-            bridgedLog("   Was suspended: \(wasSuspended)")
             bridgedLog("   Should resume: \(shouldResume)")
             logStateSnapshot(context: "interruption-ended")
         } else if type == .began {
             bridgedLog("🔇 AUDIO INTERRUPTION BEGAN")
             bridgedLog("   Reason: \(reasonString)")
-            bridgedLog("   Was suspended: \(wasSuspended)")
             logStateSnapshot(context: "interruption-began")
-            bridgedLog("   ⚠️ Engine and players will be stopped automatically by iOS")
         }
     }
 
